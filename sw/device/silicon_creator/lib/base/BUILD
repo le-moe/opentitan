@@ -154,6 +154,7 @@ cc_library(
 cc_library(
     name = "chip",
     hdrs = ["chip.h"],
+    deps = ["//hw/top:top_lib"],
 )
 
 cc_library(

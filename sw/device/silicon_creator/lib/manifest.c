@@ -26,6 +26,8 @@ static_assert(CHIP_BL0_SIZE_MIN >= CHIP_MANIFEST_SIZE,
               "`CHIP_BL0_SIZE_MIN` is too small");
 static_assert(CHIP_BL0_SIZE_MAX >= CHIP_BL0_SIZE_MIN,
               "`CHIP_BL0_SIZE_MAX` is too small");
+static_assert(NVM_SIZE_BYTES / 2 >= CHIP_ROM_EXT_SIZE_MAX,
+              "`CHIP_ROM_EXT_SIZE_MAX` exceeds half of NVM");
 static_assert(CHIP_BL0_SIZE_MAX <=
                   ((NVM_SIZE_BYTES / 2) - CHIP_ROM_EXT_SIZE_MAX),
               "`CHIP_BL0_SIZE_MAX` is too large");

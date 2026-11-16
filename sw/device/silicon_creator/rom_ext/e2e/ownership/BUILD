@@ -593,7 +593,7 @@ _FLASH_PERMISSION_TESTS = {
         name = "flash_permission_test_slot_{}".format(name),
         srcs = ["flash_regions.c"],
         fpga = {
-            "assemble": "{rom_ext}@{rom_ext_offset} {firmware}@0x10000",
+            "assemble": "{rom_ext}@{rom_ext_offset} {firmware}@{owner_slot_a}",
             "binaries": {
                 ":flash_regions": "flash_regions",
             },

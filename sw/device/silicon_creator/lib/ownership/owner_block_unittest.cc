@@ -11,6 +11,7 @@
 #include "gtest/gtest.h"
 #include "sw/device/lib/base/bitfield.h"
 #include "sw/device/lib/testing/binary_blob.h"
+#include "sw/device/silicon_creator/lib/base/chip.h"
 #include "sw/device/silicon_creator/lib/boot_data.h"
 #include "sw/device/silicon_creator/lib/drivers/mock_flash_ctrl.h"
 #include "sw/device/silicon_creator/lib/error.h"
@@ -1201,14 +1202,18 @@ TEST_P(RescueCheckTest, RescueBounds) {
   EXPECT_EQ(error, expect);
 }
 
+constexpr uint16_t kRomExtPages = CHIP_ROM_EXT_SIZE_MAX / NVM_BYTES_PER_PAGE;
+constexpr uint16_t kRescuePages = NVM_PAGES_PER_SLOT - kRomExtPages;
+
 // clang-format off
 INSTANTIATE_TEST_SUITE_P(AllCases, RescueCheckTest,
 testing::Values(
-    std::make_tuple(32, 224, kErrorOk),
+    std::make_tuple(kRomExtPages, kRescuePages, kErrorOk),
     // Starts in ROM_EXT region.
-    std::make_tuple(0, 224, kErrorOwnershipInvalidRescueBounds),
+    std::make_tuple(0, kRescuePages, kErrorOwnershipInvalidRescueBounds),
     // Too big
-    std::make_tuple(32, 225, kErrorOwnershipInvalidRescueBounds)
+    std::make_tuple(kRomExtPages, kRescuePages + 1,
+                    kErrorOwnershipInvalidRescueBounds)
 ));
 // clang-format on
 

@@ -177,6 +177,7 @@ cc_test(
         "//sw/device/lib/base:bitfield",
         "//sw/device/lib/testing:binary_blob",
         "//sw/device/silicon_creator/lib:boot_data",
+        "//sw/device/silicon_creator/lib/base:chip",
         "//sw/device/silicon_creator/testing:rom_test",
         "@googletest//:gtest_main",
     ],

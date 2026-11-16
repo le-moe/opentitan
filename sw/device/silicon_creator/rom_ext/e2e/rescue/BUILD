@@ -188,7 +188,7 @@ genrule(
                 # First make sure the ROM_EXT is faulting because there is no firmware
                 --exec="console --non-interactive --exit-success='BFV:' --exit-failure='PASS|FAIL'"
                 # Construct a firmware image with the bad ROM_EXT
-                --exec="image assemble --size=131072 --mirror=false --output={image_name} {bad_rom_ext}@0 {payload}@0x10000"
+                --exec="image assemble --size=262144 --mirror=false --output={image_name} {bad_rom_ext}@0 {payload}@0x20000"
                 # Load firmware via rescue, including the bad ROM_EXT
                 --exec="rescue firmware --raw --slot={slot} {image_name}"
                 # Check for firmware execution
@@ -552,7 +552,7 @@ opentitan_test(
                 config["rom_ext"]: "romext",
                 "//sw/device/silicon_creator/rom_ext/e2e/attestation:print_certs": "firmware",
             },
-            owner_offset = "0x10000",
+            owner_offset = "0x20000",
             params = config["params"],
             romext_offset = "0",
             test_cmd = """
@@ -575,7 +575,7 @@ opentitan_test(
             "//sw/device/silicon_creator/rom_ext:rom_ext_xmodem_rescue_disability": "romext",
             "//sw/device/silicon_creator/rom_ext/e2e/attestation:print_certs": "firmware",
         },
-        owner_offset = "0x10000",
+        owner_offset = "0x20000",
         romext_offset = "0",
         test_cmd = """
         rescue --action=disability
@@ -595,7 +595,7 @@ opentitan_test(
             "//sw/device/silicon_creator/rom_ext:rom_ext_spidfu_rescue_disability": "romext",
             "//sw/device/silicon_creator/rom_ext/e2e/attestation:print_certs": "firmware",
         },
-        owner_offset = "0x10000",
+        owner_offset = "0x20000",
         params = "-p spi-dfu -t gpio -v +Ioa2",
         romext_offset = "0",
         test_cmd = """

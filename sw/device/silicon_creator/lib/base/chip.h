@@ -55,11 +55,13 @@
  * Allowed bounds for the `length` field of a first owner boot stage manifest.
  */
 #define CHIP_BL0_SIZE_MIN CHIP_MANIFEST_SIZE
-#ifndef OT_COVERAGE_ENABLED
-#define CHIP_BL0_SIZE_MAX 0x70000
-#else  // OT_COVERAGE_ENABLED
+#if defined(OPENTITAN_IS_DARJEELING) || defined(OPENTITAN_IS_ENGLISHBREAKFAST)
+// Darjeeling (64 KiB SRAM) and English Breakfast (64 KiB flash) have 32 KiB
+// slots (`NVM_SIZE_BYTES / 2`).
+#define CHIP_BL0_SIZE_MAX 0x4000
+#else
 #define CHIP_BL0_SIZE_MAX 0x60000
-#endif  // OT_COVERAGE_ENABLED
+#endif
 
 /**
  * ROM_EXT manifest identifier (ASCII "OTRE").
@@ -70,11 +72,11 @@
  * Allowed bounds for the `length` field of a ROM_EXT manifest.
  */
 #define CHIP_ROM_EXT_SIZE_MIN CHIP_MANIFEST_SIZE
-#ifndef OT_COVERAGE_ENABLED
-#define CHIP_ROM_EXT_SIZE_MAX 0x10000
-#else  // OT_COVERAGE_ENABLED
+#if defined(OPENTITAN_IS_DARJEELING) || defined(OPENTITAN_IS_ENGLISHBREAKFAST)
+#define CHIP_ROM_EXT_SIZE_MAX 0x4000
+#else
 #define CHIP_ROM_EXT_SIZE_MAX 0x20000
-#endif  // OT_COVERAGE_ENABLED
+#endif
 #define CHIP_ROM_EXT_RESIZABLE_SIZE_MAX \
   (CHIP_ROM_EXT_SIZE_MAX + CHIP_BL0_SIZE_MAX)
 

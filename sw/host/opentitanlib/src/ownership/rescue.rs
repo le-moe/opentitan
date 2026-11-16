@@ -197,9 +197,9 @@ impl OwnerRescueConfig {
             protocol: RescueProtocol::Xmodem,
             trigger: RescueTrigger::UartBreak,
             // Start after the ROM_EXT.
-            start: 32,
+            start: 64,
             // End at the end of the partition.
-            size: 224,
+            size: 192,
             command_allow: vec![
                 CommandTag::Empty,
                 CommandTag::MinBl0SecVerRequest,

@@ -224,7 +224,7 @@ impl Image {
         if (manifest.identifier == CHIP_ROM_EXT_IDENTIFIER)
             && (manifest.length > CHIP_ROM_EXT_SIZE_MAX)
         {
-            log::warn!("ROM_EXT is larger than 64k. Link offsets may need recalculating.");
+            log::warn!("ROM_EXT is larger than 128k. Link offsets may need recalculating.");
         }
 
         Ok(())

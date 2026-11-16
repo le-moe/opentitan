@@ -106,7 +106,7 @@ opentitan_test(
     },
     fpga = fpga_params(
         timeout = "moderate",
-        assemble = "{rom_ext}@0 {boot_test_a}@0x10000",
+        assemble = "{rom_ext}@0 {boot_test_a}@0x20000",
         binaries = {
             ":boot_test_slot_a": "boot_test_a",
             ":boot_test_slot_b": "boot_test_b",
@@ -118,9 +118,9 @@ opentitan_test(
         rom_ext = ":rom_ext_0",
         test_cmd = """
             # First, assemble the additional images we'll need for this test.
-            --exec="image assemble -s 131072 --mirror=false -o fw1.bin {rom_ext1}@0 {boot_test_b}@0x10000"
-            --exec="image assemble -s 131072 --mirror=false -o fw2.bin {rom_ext2}@0 {boot_test_a}@0x10000"
-            --exec="image assemble -s 131072 --mirror=false -o fw3.bin {rom_ext3}@0 {boot_test_b}@0x10000"
+            --exec="image assemble -s 262144 --mirror=false -o fw1.bin {rom_ext1}@0 {boot_test_b}@0x20000"
+            --exec="image assemble -s 262144 --mirror=false -o fw2.bin {rom_ext2}@0 {boot_test_a}@0x20000"
+            --exec="image assemble -s 262144 --mirror=false -o fw3.bin {rom_ext3}@0 {boot_test_b}@0x20000"
 
             # Check the initial version 0 has been bootstrapped into SlotA
             --exec="console --non-interactive --exit-success='rom_ext_min_sec_ver = 0'"

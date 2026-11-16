@@ -180,8 +180,8 @@ opentitan_binary(
             otp = ":otp_img_flash_ecc_error",
             primary = t["primary"],
             rom_ext = "//sw/device/silicon_creator/rom_ext:rom_ext_dice_x509_slot_virtual",
-            slot_a = "0x10000",
-            slot_b = "0x90000",
+            slot_a = "0x20000",
+            slot_b = "0xa0000",
             # No longer relevant on RRAM; exclude all FPGA variants from CI entirely.
             # https://github.com/lowRISC/opentitan/issues/30897
             tags = ["skip_in_ci"],
@@ -228,8 +228,8 @@ opentitan_test(
         otp = ":otp_img_flash_exc_handler_disabled",
         primary = "SlotA",
         rom_ext = "//sw/device/silicon_creator/rom_ext:rom_ext_dice_x509_slot_virtual",
-        slot_a = "0x10000",
-        slot_b = "0x90000",
+        slot_a = "0x20000",
+        slot_b = "0xa0000",
         # No longer relevant on RRAM; exclude all FPGA variants from CI entirely.
         # https://github.com/lowRISC/opentitan/issues/30897
         tags = ["skip_in_ci"],

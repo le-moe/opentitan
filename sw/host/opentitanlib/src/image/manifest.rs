@@ -61,9 +61,9 @@ pub const MANIFEST_EXT_NAME_MLDSA87_SIGNATURE: u32 = 0x53384c4d;
 pub const CHIP_ROM_EXT_IDENTIFIER: u32 = 0x4552544f;
 pub const CHIP_BL0_IDENTIFIER: u32 = 0x3042544f;
 pub const CHIP_ROM_EXT_SIZE_MIN: u32 = 8788;
-pub const CHIP_ROM_EXT_SIZE_MAX: u32 = 0x10000;
+pub const CHIP_ROM_EXT_SIZE_MAX: u32 = 0x20000;
 pub const CHIP_BL0_SIZE_MIN: u32 = 8788;
-pub const CHIP_BL0_SIZE_MAX: u32 = 0x70000;
+pub const CHIP_BL0_SIZE_MAX: u32 = 0x60000;
 
 with_unknown! {
     pub enum ManifestKind: u32 {
