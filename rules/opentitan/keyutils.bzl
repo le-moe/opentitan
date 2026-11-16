@@ -2,8 +2,8 @@
 # Licensed under the Apache License, Version 2.0, see LICENSE for details.
 # SPDX-License-Identifier: Apache-2.0
 
-load("//rules:const.bzl", "CONST")
 load("@bazel_skylib//lib:structs.bzl", "structs")
+load("//rules:const.bzl", "CONST")
 
 def ecdsa_key_for_lc_state(key_structs, hw_lc_state):
     """Return a dictionary containing a single key that can be used in the given
@@ -78,6 +78,28 @@ def spx_key_by_name(key_structs, nickname):
         keys[0].spx.label: keys[0].spx.name,
     }
 
+def mldsa_key_for_lc_state(key_structs, hw_lc_state):
+    """Return a dictionary containing a single ML-DSA key that can be used in
+    the given LC state. The format is compatible with opentitan_test.
+    """
+    keys = [k for k in key_structs if (k.mldsa != None and key_allowed_in_lc_state(k.mldsa, hw_lc_state))]
+    if len(keys) == 0:
+        fail("There are no ML-DSA keys compatible with HW LC state {} in key structs".format(hw_lc_state))
+    return {
+        keys[0].mldsa.label: keys[0].mldsa.name,
+    }
+
+def mldsa_key_by_name(key_structs, nickname):
+    """Return a dictionary containing a single ML-DSA key that matches the name given.
+    The format is compatible with opentitan_test.
+    """
+    keys = [k for k in key_structs if (k.mldsa != None and k.mldsa.name == nickname)]
+    if len(keys) == 0:
+        fail("There are no ML-DSA keys compatible with name {} in key structs".format(nickname))
+    return {
+        keys[0].mldsa.label: keys[0].mldsa.name,
+    }
+
 def key_allowed_in_lc_state(key, hw_lc_state_val):
     all_hw_lc_state_vals = structs.to_dict(CONST.LCV).values()
     if not hw_lc_state_val in all_hw_lc_state_vals:
@@ -88,7 +110,8 @@ def filter_key_structs_for_lc_state(key_structs, hw_lc_state):
     return [k for k in key_structs if (
         (not k.rsa or key_allowed_in_lc_state(k.rsa, hw_lc_state)) and
         (not k.ecdsa or key_allowed_in_lc_state(k.ecdsa, hw_lc_state)) and
-        (not k.spx or key_allowed_in_lc_state(k.spx, hw_lc_state))
+        (not k.spx or key_allowed_in_lc_state(k.spx, hw_lc_state)) and
+        (not k.mldsa or key_allowed_in_lc_state(k.mldsa, hw_lc_state))
     )]
 
 def create_key_(name, label, hw_lc_states):
@@ -141,11 +164,12 @@ def create_prod_key(name, label):
         CONST.LCV.RMA,
     ])
 
-def create_key_struct(ecdsa_key, rsa_key, spx_key):
+def create_key_struct(ecdsa_key, rsa_key, spx_key, mldsa_key = None):
     return struct(
         ecdsa = ecdsa_key,
         rsa = rsa_key,
         spx = spx_key,
+        mldsa = mldsa_key,
     )
 
 # Keys available in the repo
@@ -173,12 +197,26 @@ SILICON_CREATOR_KEYS = struct(
                 create_prod_key("prod_key_0", "@//sw/device/silicon_creator/rom/keys/fake/spx:spx_keyset"),
             ],
         ),
+        MLDSA = struct(
+            TEST = [
+                create_test_key("test_key_0", "@//sw/device/silicon_creator/rom/keys/fake/mldsa:mldsa_keyset"),
+            ],
+            DEV = [
+                create_dev_key("dev_key_0", "@//sw/device/silicon_creator/rom/keys/fake/mldsa:mldsa_keyset"),
+            ],
+            PROD = [
+                create_prod_key("prod_key_0", "@//sw/device/silicon_creator/rom/keys/fake/mldsa:mldsa_keyset"),
+            ],
+        ),
     ),
     # We can't expose real private keys publicly.
     REAL = None,
     UNAUTHORIZED = struct(
         SPX = [
             create_key_("unauthorized_key_0", "@//sw/device/silicon_creator/rom/keys/unauthorized/spx:spx_keyset", []),
+        ],
+        MLDSA = [
+            create_key_("unauthorized_key_0", "@//sw/device/silicon_creator/rom/keys/unauthorized/mldsa:mldsa_keyset", []),
         ],
     ),
 )
@@ -193,4 +231,10 @@ ECDSA_SPX_KEY_STRUCTS = [
     create_key_struct(SILICON_CREATOR_KEYS.FAKE.ECDSA.TEST[0], None, SILICON_CREATOR_KEYS.FAKE.SPX.TEST[0]),
     create_key_struct(SILICON_CREATOR_KEYS.FAKE.ECDSA.DEV[0], None, SILICON_CREATOR_KEYS.FAKE.SPX.DEV[0]),
     create_key_struct(SILICON_CREATOR_KEYS.FAKE.ECDSA.PROD[0], None, SILICON_CREATOR_KEYS.FAKE.SPX.PROD[0]),
+]
+
+ECDSA_MLDSA_KEY_STRUCTS = [
+    create_key_struct(SILICON_CREATOR_KEYS.FAKE.ECDSA.TEST[0], None, None, SILICON_CREATOR_KEYS.FAKE.MLDSA.TEST[0]),
+    create_key_struct(SILICON_CREATOR_KEYS.FAKE.ECDSA.DEV[0], None, None, SILICON_CREATOR_KEYS.FAKE.MLDSA.DEV[0]),
+    create_key_struct(SILICON_CREATOR_KEYS.FAKE.ECDSA.PROD[0], None, None, SILICON_CREATOR_KEYS.FAKE.MLDSA.PROD[0]),
 ]

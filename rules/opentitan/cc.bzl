@@ -9,20 +9,20 @@ load(
     _OPENTITAN_PLATFORM = "OPENTITAN_PLATFORM",
     _opentitan_transition = "opentitan_transition",
 )
+load("@lowrisc_opentitan//rules/opentitan:exec_env.bzl", "ExecEnvInfo")
 load(
     "@lowrisc_opentitan//rules/opentitan:transform.bzl",
     "convert_to_vmem",
     "obj_disassemble",
     "obj_transform",
 )
-load("@rules_cc//cc:action_names.bzl", "CPP_LINK_STATIC_LIBRARY_ACTION_NAME", "OBJ_COPY_ACTION_NAME")
-load("@opentitan_signing_infra//signing:defs.bzl", "sign_binary")
-load("@lowrisc_opentitan//rules/opentitan:exec_env.bzl", "ExecEnvInfo")
 load("@lowrisc_opentitan//rules/opentitan:util.bzl", "get_fallback", "get_override")
+load("@opentitan_signing_infra//signing:defs.bzl", "sign_binary")
+load("@rules_cc//cc:action_names.bzl", "CPP_LINK_STATIC_LIBRARY_ACTION_NAME", "OBJ_COPY_ACTION_NAME")
 load("@rules_cc//cc:find_cc_toolchain.bzl", "find_cc_toolchain")
+load("//rules/opentitan:providers.bzl", "OpenTitanBinaryInfo", "OpenTitanTestInfo")
 load("//rules/opentitan:toolchain.bzl", "LOCALTOOLS_TOOLCHAIN")
 load("//rules/opentitan:util.bzl", "assemble_for_test", "recursive_format")
-load("//rules/opentitan:providers.bzl", "OpenTitanBinaryInfo", "OpenTitanTestInfo")
 
 def _expand(ctx, name, items):
     """Perform location and make_variable expansion on a list of items.
@@ -212,9 +212,10 @@ def _build_binary(ctx, exec_env, name, deps, kind):
     ecdsa_key = get_fallback(ctx, "attr.ecdsa_key", exec_env)
     rsa_key = get_fallback(ctx, "attr.rsa_key", exec_env)
     spx_key = get_fallback(ctx, "attr.spx_key", exec_env)
+    mldsa_key = get_fallback(ctx, "attr.mldsa_key", exec_env)
     if (manifest or rsa_key) and kind != "ram":
         if not (manifest and (rsa_key or ecdsa_key)):
-            fail("Signing requires a manifest and an rsa_key or ecdsa_key, and optionally an spx_key")
+            fail("Signing requires a manifest and an rsa_key or ecdsa_key, and optionally an spx_key or mldsa_key")
         signed = sign_binary(
             ctx,
             opentitantool = exec_env._opentitantool,
@@ -222,6 +223,7 @@ def _build_binary(ctx, exec_env, name, deps, kind):
             ecdsa_key = ecdsa_key,
             rsa_key = rsa_key,
             spx_key = spx_key,
+            mldsa_key = mldsa_key,
             manifest = manifest,
         )
     else:
@@ -630,6 +632,10 @@ common_binary_attrs = {
     "spx_key": attr.label_keyed_string_dict(
         allow_files = True,
         doc = "SPX key to sign images",
+    ),
+    "mldsa_key": attr.label_keyed_string_dict(
+        allow_files = True,
+        doc = "ML-DSA key to sign images",
     ),
     "manifest": attr.label(
         allow_single_file = True,

@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
+load("//hw/top:defs.bzl", "opentitan_require_top")
 load("//hw/top_earlgrey/data/autogen:defs.bzl", "EARLGREY_ALERTS")
 load("//rules:const.bzl", "CONST", "EARLGREY_LOC_ALERTS")
 load(
@@ -19,7 +20,6 @@ load(
     "otp_per_class_ints",
     "otp_per_class_lists",
 )
-load("//hw/top:defs.bzl", "opentitan_require_top")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -590,13 +590,50 @@ otp_image(
     overlays = STD_OTP_OVERLAYS + [":otp_json_bootstrap_disabled"],
 )
 
+# Overlay enabling ML-DSA-87 PQ verification in ROM (`MldsaEnabled`).
+otp_json(
+    name = "otp_json_sigverify_mldsa",
+    partitions = [
+        otp_partition(
+            name = "CREATOR_SW_CFG",
+            items = {
+                "CREATOR_SW_CFG_SIGVERIFY_SPX_EN": otp_hex(CONST.PQ_MLDSA_ENABLED),
+            },
+        ),
+    ],
+    target_compatible_with = TARGET_COMPATIBLE_WITH,
+)
+
+# Standard RMA/DEV/PROD OTP images with ML-DSA fake root keys and
+# `CREATOR_SW_CFG_SIGVERIFY_SPX_EN = CONST.PQ_MLDSA_ENABLED`.
+[
+    otp_image(
+        name = "img_{}_mldsa".format(lc),
+        src = ":otp_json_{}".format(lc),
+        overlays = STD_OTP_OVERLAYS + [
+            "//sw/device/silicon_creator/rom/keys/fake/otp:json_rot_keys_mldsa",
+            ":otp_json_sigverify_mldsa",
+        ],
+    )
+    for lc in [
+        "dev",
+        "prod",
+        "prod_end",
+        "rma",
+    ]
+]
+
 filegroup(
     name = "otp_imgs",
     srcs = [
         ":img_dev",
+        ":img_dev_mldsa",
         ":img_prod",
+        ":img_prod_end_mldsa",
+        ":img_prod_mldsa",
         ":img_raw",
         ":img_rma",
+        ":img_rma_mldsa",
         ":img_test_locked0",
         ":img_test_locked1",
         ":img_test_locked2",

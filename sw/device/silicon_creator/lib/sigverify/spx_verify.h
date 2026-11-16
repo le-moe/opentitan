@@ -28,12 +28,22 @@ enum {
   /**
    * A non-trivial constant equal to `kSigverifySpxSuccess`.
    *
-   * SPHINCS+ signature verification is always disabled in TEST_UNLOCKED states.
-   * In other life cycle states, setting `CREATOR_SW_CFG_SIGVERIFY_SPX_EN` to
-   * this value disables SPHINCS+ signature verification and any other value
-   * enables it.
+   * Post-quantum signature verification is always disabled in TEST_UNLOCKED
+   * states. In other life cycle states, setting
+   * `CREATOR_SW_CFG_SIGVERIFY_SPX_EN` to this value disables post-quantum
+   * verification, `kSigverifyPqMldsaEnabledOtp` selects ML-DSA-87, and any
+   * other value enables SPHINCS+.
    */
   kSigverifySpxDisabledOtp = kSigverifySpxSuccess,
+  /**
+   * Sparse FSM value stored in `CREATOR_SW_CFG_SIGVERIFY_SPX_EN` to select
+   * hardware-accelerated ML-DSA-87 verification instead of SPHINCS+.
+   *
+   * Generated with:
+   *   sparse-fsm-encode.py --language=c --avoid-zero --seed 20261116 \
+   *     -d 15 -m 4 -n 32
+   */
+  kSigverifyPqMldsaEnabledOtp = 0x678f1f9d,
 };
 
 /**

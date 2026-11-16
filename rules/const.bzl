@@ -27,6 +27,7 @@ CONST = struct(
     # Must match the definition in spx_verify.h
     SPX_DISABLED = 0x8d6c8c17,
     SPX_SUCCESS = 0x8d6c8c17,
+    PQ_MLDSA_ENABLED = 0x678f1f9d,
     # SPX+ signature verification parameters are mapped to specific config IDs.
     # Must match the definitions in //sw/device/silicon_creator/lib/sigverify/spx_key.h
     SPX_CONFIG_ID = struct(

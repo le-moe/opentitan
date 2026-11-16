@@ -4,8 +4,8 @@
 
 load("@bazel_skylib//lib:types.bzl", "types")
 load("@lowrisc_opentitan//rules/opentitan:providers.bzl", "OpenTitanBinaryInfo", "get_one_binary_file")
-load("@lowrisc_opentitan//rules/opentitan:util.bzl", "get_fallback", "get_files")
 load("@lowrisc_opentitan//rules/opentitan:transform.bzl", "rram_otp_image")
+load("@lowrisc_opentitan//rules/opentitan:util.bzl", "get_fallback", "get_files")
 load("//rules/opentitan:toolchain.bzl", "LOCALTOOLS_TOOLCHAIN")
 
 # ExecEnvInfo provider fields and whether the field is required.
@@ -17,6 +17,7 @@ _FIELDS = {
     "ecdsa_key": ("attr.ecdsa_key", False),
     "rsa_key": ("attr.rsa_key", False),
     "spx_key": ("attr.spx_key", False),
+    "mldsa_key": ("attr.mldsa_key", False),
     "manifest": ("attr.manifest", False),
     "rom": ("attr.rom", False),
     "rom_ext": ("attr.rom_ext", False),
@@ -147,6 +148,11 @@ def exec_env_common_attrs(**kwargs):
             default = kwargs.get("spx_key", {}),
             allow_files = True,
             doc = "SPX key to sign images",
+        ),
+        "mldsa_key": attr.label_keyed_string_dict(
+            default = kwargs.get("mldsa_key", {}),
+            allow_files = True,
+            doc = "ML-DSA key to sign images",
         ),
         "manifest": attr.label(
             default = kwargs.get("manifest"),

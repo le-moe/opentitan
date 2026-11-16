@@ -9,6 +9,10 @@ EARLGREY_OTP_SIGVERIFY_FAKE_KEYS = [
     "@//sw/device/silicon_creator/rom/keys/fake/otp:json_rot_keys",
 ]
 
+EARLGREY_OTP_SIGVERIFY_FAKE_MLDSA_KEYS = [
+    "@//sw/device/silicon_creator/rom/keys/fake/otp:json_rot_keys_mldsa",
+]
+
 # This is a set of overlays to generate a generic, standard OTP image.
 # Additional overlays can be applied on top to further customize the OTP.
 # This set of overlays does not include any of the SECRET[0-2] partitions.

@@ -143,12 +143,13 @@
                     name: "CREATOR_SW_CFG_SIGVERIFY_SPX_EN",
                     size: "4",
                     desc: '''
-                    Controls whether or not SPHINCS+ signature verification will
-                    be executed when the ROM attempts to boot the ROM_EXT.
-                    A value of kSigverifySpxDisabledOtp disables SPHINCS+
-                    signature verification, while all other values enable it.
-                    Note, SPHINCS+ signature verification is always disabled in
-                    TEST_UNLOCKED* LC states.
+                    Controls which post-quantum signature scheme (if any) is
+                    executed when the ROM attempts to boot the ROM_EXT.
+                    A value of kSigverifySpxDisabledOtp disables post-quantum
+                    signature verification, kSigverifyPqMldsaEnabledOtp selects
+                    ML-DSA-87, and all other values enable SPHINCS+.
+                    Note, post-quantum signature verification is always disabled
+                    in TEST_UNLOCKED* LC states.
                     '''
                 }
                 {

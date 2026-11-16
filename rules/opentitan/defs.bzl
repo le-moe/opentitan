@@ -6,6 +6,11 @@
 
 load("@bazel_skylib//lib:sets.bzl", "sets")
 load(
+    "@lowrisc_opentitan//hw/top:defs.bzl",
+    "ALL_TOPS",
+    "opentitan_select_top",
+)
+load(
     "@lowrisc_opentitan//rules:rv.bzl",
     _CHERIOT_PLATFORM = "CHERIOT_PLATFORM",
     _OPENTITAN_CPU = "OPENTITAN_CPU",
@@ -32,6 +37,8 @@ load(
     "@lowrisc_opentitan//rules/opentitan:keyutils.bzl",
     _ecdsa_key_by_name = "ecdsa_key_by_name",
     _ecdsa_key_for_lc_state = "ecdsa_key_for_lc_state",
+    _mldsa_key_by_name = "mldsa_key_by_name",
+    _mldsa_key_for_lc_state = "mldsa_key_for_lc_state",
     _rsa_key_by_name = "rsa_key_by_name",
     _rsa_key_for_lc_state = "rsa_key_for_lc_state",
     _spx_key_by_name = "spx_key_by_name",
@@ -40,6 +47,11 @@ load(
 load(
     "@lowrisc_opentitan//rules/opentitan:manual.bzl",
     _opentitan_manual_test = "opentitan_manual_test",
+)
+load(
+    "@lowrisc_opentitan//rules/opentitan:qemu.bzl",
+    _qemu_params = "qemu_params",
+    _sim_qemu = "sim_qemu",
 )
 load(
     "@lowrisc_opentitan//rules/opentitan:silicon.bzl",
@@ -55,16 +67,6 @@ load(
     "@lowrisc_opentitan//rules/opentitan:sim_verilator.bzl",
     _sim_verilator = "sim_verilator",
     _verilator_params = "verilator_params",
-)
-load(
-    "@lowrisc_opentitan//rules/opentitan:qemu.bzl",
-    _qemu_params = "qemu_params",
-    _sim_qemu = "sim_qemu",
-)
-load(
-    "@lowrisc_opentitan//hw/top:defs.bzl",
-    "ALL_TOPS",
-    "opentitan_select_top",
 )
 load(
     "@provisioning_exts//:cfg.bzl",
@@ -108,6 +110,9 @@ rsa_key_by_name = _rsa_key_by_name
 
 spx_key_for_lc_state = _spx_key_for_lc_state
 spx_key_by_name = _spx_key_by_name
+
+mldsa_key_for_lc_state = _mldsa_key_for_lc_state
+mldsa_key_by_name = _mldsa_key_by_name
 
 opentitan_manual_test = _opentitan_manual_test
 
@@ -322,6 +327,7 @@ def opentitan_test(
         ecdsa_key = None,
         rsa_key = None,
         spx_key = None,
+        mldsa_key = None,
         manifest = None,
         exec_env = {},
         fpga = _fpga_params(),
@@ -351,6 +357,7 @@ def opentitan_test(
       ecdsa_key: ECDSA key to sign the binary for this test.
       rsa_key: RSA key to sign the binary for this test.
       spx_key: SPX key to sign the binary for this test.
+      mldsa_key: ML-DSA-87 key to sign the binary for this test.
       manifest: manifest used during signing for this test.
       linkopts: Linker options for this test.
       exec_env: A dictionary of execution environments.  The keys are labels to
@@ -520,6 +527,7 @@ def opentitan_test(
             ecdsa_key = ecdsa_key,
             rsa_key = rsa_key,
             spx_key = spx_key,
+            mldsa_key = mldsa_key,
             manifest = manifest,
             # Point to test suite created below.
             test_suite = str(Label(":{}".format(name))),
