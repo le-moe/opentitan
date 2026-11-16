@@ -5,6 +5,7 @@
 #include "hw/top/top_memory.h"
 #include "sw/device/lib/base/hardened_asm.h"
 #include "sw/device/lib/coverage/api_asm.h"
+#include "sw/device/silicon_creator/lib/stack_utilization_asm.h"
 #include "hw/top/otp_ctrl_regs.h"
 
 /**
@@ -136,6 +137,18 @@ _rom_ext_start_boot:
    * memory at addresses below `sp`.
    */
   la   sp, _stack_end
+
+#ifdef STACK_UTILIZATION_CHECK
+  // Fill the stack with a known pattern after the NA4 stack guard at
+  // `_stack_start`.
+.L_stack_clear:
+  la   a0, _stack_start + 4
+  li   a1, STACK_UTILIZATION_FREE_PATTERN
+.L_stack_clear_loop:
+  sw   a1, 0(a0)
+  addi a0, a0, 4
+  bltu a0, sp, .L_stack_clear_loop
+#endif
 
   /**
    * Setup C Runtime

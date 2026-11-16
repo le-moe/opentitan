@@ -2,7 +2,8 @@
 # Licensed under the Apache License, Version 2.0, see LICENSE for details.
 # SPDX-License-Identifier: Apache-2.0
 
-load("//rules:const.bzl", "CONST", "hex")
+load("//hw/top_earlgrey/data/otp:defs.bzl", "EARLGREY_OTP_SIGVERIFY_FAKE_MLDSA_KEYS")
+load("//rules:const.bzl", "CONST", "hex", "hex_digits")
 load(
     "//rules:manifest.bzl",
     "integrator_specific_firmware_binding",
@@ -28,6 +29,7 @@ load(
     "DEFAULT_TEST_FAILURE_MSG",
     "DEFAULT_TEST_SUCCESS_MSG",
     "fpga_params",
+    "opentitan_binary",
     "opentitan_test",
 )
 
@@ -359,5 +361,212 @@ opentitan_test(
         "//sw/device/lib/testing/test_framework:ottf_main",
         "//sw/device/silicon_creator/lib:boot_log",
         "//sw/device/silicon_creator/lib/drivers:retention_sram",
+    ],
+)
+
+_BOOT_TEST_DEPS = [
+    "//sw/device/lib/base:status",
+    "//sw/device/lib/testing/test_framework:ottf_main",
+    "//sw/device/silicon_creator/lib:boot_log",
+    "//sw/device/silicon_creator/lib/drivers:retention_sram",
+]
+
+# Hybrid ECDSA + ML-DSA-87 ROM_EXT -> BL0 verified-boot E2E tests.
+opentitan_test(
+    name = "key_prod_hybrid_mldsa87",
+    srcs = [":boot_test"],
+    ecdsa_key = {"//sw/device/silicon_creator/lib/ownership/keys/fake:ecdsa_keyset": "app_prod_mldsa_0"},
+    exec_env = {
+        "//hw/top_earlgrey:fpga_cw340_rom_ext": None,
+    },
+    mldsa_key = {"//sw/device/silicon_creator/lib/ownership/keys/fake:mldsa_keyset": "app_prod_0"},
+    deps = _BOOT_TEST_DEPS,
+)
+
+opentitan_test(
+    name = "key_dev_hybrid_mldsa87",
+    srcs = [":boot_test"],
+    ecdsa_key = {"//sw/device/silicon_creator/lib/ownership/keys/fake:ecdsa_keyset": "app_dev_mldsa_0"},
+    exec_env = {
+        "//hw/top_earlgrey:fpga_cw340_rom_ext": None,
+    },
+    mldsa_key = {"//sw/device/silicon_creator/lib/ownership/keys/fake:mldsa_keyset": "app_dev_0"},
+    deps = _BOOT_TEST_DEPS,
+)
+
+opentitan_test(
+    name = "key_unauthorized_mldsa",
+    srcs = [":boot_test"],
+    ecdsa_key = {"//sw/device/silicon_creator/lib/ownership/keys/fake:ecdsa_keyset": "app_prod_mldsa_0"},
+    exec_env = {
+        "//hw/top_earlgrey:fpga_cw340_rom_ext": None,
+    },
+    fpga = fpga_params(
+        exit_failure = DEFAULT_TEST_SUCCESS_MSG,
+        exit_success = "BFV:0c4f5705",
+    ),
+    mldsa_key = {"//sw/device/silicon_creator/lib/ownership/keys/fake:mldsa_keyset": "app_unauthorized_0"},
+    deps = _BOOT_TEST_DEPS,
+)
+
+opentitan_binary(
+    name = "hybrid_mldsa_slot_a_bin",
+    testonly = True,
+    srcs = [":boot_test"],
+    ecdsa_key = {"//sw/device/silicon_creator/lib/ownership/keys/fake:ecdsa_keyset": "app_prod_mldsa_0"},
+    exec_env = ["//hw/top_earlgrey:fpga_cw340_rom_ext"],
+    mldsa_key = {"//sw/device/silicon_creator/lib/ownership/keys/fake:mldsa_keyset": "app_prod_0"},
+    deps = _BOOT_TEST_DEPS,
+)
+
+opentitan_binary(
+    name = "hybrid_mldsa_slot_b_bin",
+    testonly = True,
+    srcs = [":boot_test"],
+    ecdsa_key = {"//sw/device/silicon_creator/lib/ownership/keys/fake:ecdsa_keyset": "app_prod_mldsa_0"},
+    exec_env = ["//hw/top_earlgrey:fpga_cw340_rom_ext"],
+    linker_script = "//sw/device/lib/testing/test_framework:ottf_ld_silicon_owner_slot_b",
+    mldsa_key = {"//sw/device/silicon_creator/lib/ownership/keys/fake:mldsa_keyset": "app_prod_0"},
+    deps = _BOOT_TEST_DEPS,
+)
+
+filegroup(
+    name = "hybrid_mldsa_slot_a_signed_bin",
+    testonly = True,
+    srcs = [":hybrid_mldsa_slot_a_bin"],
+    output_group = "fpga_cw340_rom_ext_signed_bin",
+)
+
+[
+    genrule(
+        name = "hybrid_mldsa_slot_a_{}_bin".format(name),
+        testonly = True,
+        srcs = [":hybrid_mldsa_slot_a_signed_bin"],
+        outs = ["hybrid_mldsa_slot_a_{}.bin".format(name)],
+        cmd = "$(location //sw/device/silicon_creator/lib/sigverify:mldsa_manifest_corrupt) --mode={} $< $@".format(mode),
+        tools = ["//sw/device/silicon_creator/lib/sigverify:mldsa_manifest_corrupt"],
+    )
+    for name, mode in [
+        ("bad_sig", "bad-sig"),
+        ("bad_padding", "bad-padding"),
+        ("stripped_sig_ext", "strip-sig"),
+        ("stripped_all_ext", "strip-all"),
+    ]
+]
+
+opentitan_test(
+    name = "bad_mldsa_sig_test",
+    exec_env = {
+        "//hw/top_earlgrey:fpga_cw340_rom_ext": None,
+    },
+    fpga = fpga_params(
+        binaries = {":hybrid_mldsa_slot_a_bad_sig_bin": "firmware"},
+        exit_failure = DEFAULT_TEST_SUCCESS_MSG,
+        exit_success = "BFV:{}".format(hex_digits(CONST.BFV.SIGVERIFY.BAD_MLDSA_SIGNATURE)),
+    ),
+    manifest = None,
+)
+
+opentitan_test(
+    name = "bad_mldsa_padding_test",
+    exec_env = {
+        "//hw/top_earlgrey:fpga_cw340_rom_ext": None,
+    },
+    fpga = fpga_params(
+        binaries = {":hybrid_mldsa_slot_a_bad_padding_bin": "firmware"},
+        exit_failure = DEFAULT_TEST_SUCCESS_MSG,
+        exit_success = "BFV:{}".format(hex_digits(CONST.BFV.SIGVERIFY.BAD_MLDSA_SIGNATURE)),
+    ),
+    manifest = None,
+)
+
+opentitan_test(
+    name = "stripped_mldsa_sig_ext_test",
+    exec_env = {
+        "//hw/top_earlgrey:fpga_cw340_rom_ext": None,
+    },
+    fpga = fpga_params(
+        binaries = {":hybrid_mldsa_slot_a_stripped_sig_ext_bin": "firmware"},
+        exit_failure = DEFAULT_TEST_SUCCESS_MSG,
+        exit_success = "BFV:{}".format(hex_digits(CONST.BFV.MANIFEST.BAD_EXTENSION)),
+    ),
+    manifest = None,
+)
+
+opentitan_test(
+    name = "stripped_mldsa_all_ext_test",
+    exec_env = {
+        "//hw/top_earlgrey:fpga_cw340_rom_ext": None,
+    },
+    fpga = fpga_params(
+        binaries = {":hybrid_mldsa_slot_a_stripped_all_ext_bin": "firmware"},
+        exit_failure = DEFAULT_TEST_SUCCESS_MSG,
+        exit_success = "BFV:0c4f5705",
+    ),
+    manifest = None,
+)
+
+opentitan_test(
+    name = "mldsa_slot_a_bad_sig_slot_b_fallback_test",
+    exec_env = {
+        "//hw/top_earlgrey:fpga_cw340_rom_ext": None,
+    },
+    fpga = fpga_params(
+        assemble = "{rom_ext}@{rom_ext_slot_a} {bad_a}@{owner_slot_a} {firmware}@{owner_slot_b}",
+        binaries = {
+            ":hybrid_mldsa_slot_a_bad_sig_bin": "bad_a",
+            ":hybrid_mldsa_slot_b_bin": "firmware",
+        },
+        exit_failure = "((FAIL|FAULT).*\\n)|(BFV:[0-9a-f]{8})",
+        exit_success = "bl0_slot = __BB\\r\\n[\\s\\S]*PASS!\\r\\n",
+    ),
+    manifest = None,
+)
+
+otp_image(
+    name = "otp_img_secret2_locked_mldsa_prod",
+    src = "//hw/top_earlgrey/data/otp:otp_json_prod",
+    overlays = STD_OTP_OVERLAYS + EARLGREY_OTP_SIGVERIFY_FAKE_MLDSA_KEYS + [
+        "//sw/device/silicon_creator/rom/e2e/sigverify_mldsa:otp_json_mldsa_en",
+        "//sw/device/silicon_creator/rom_ext/e2e:otp_json_secret2_locked",
+    ],
+)
+
+# Full ROM -> ROM_EXT -> BL0 ML-DSA-87 boot
+# with SECRET2 locked and DICE CDI_0/CDI_1 keymgr_dpe verification in BL0.
+opentitan_test(
+    name = "mldsa_secret2_cdi1_e2e_test",
+    srcs = [":boot_test"],
+    defines = ["WITH_KEYMGR_DPE"],
+    ecdsa_key = {"//sw/device/silicon_creator/lib/ownership/keys/fake:ecdsa_keyset": "app_prod_mldsa_0"},
+    exec_env = {
+        "//hw/top_earlgrey:fpga_cw340_rom_ext": None,
+    },
+    fpga = fpga_params(
+        exit_failure = "((FAIL|FAULT).*\\n)|(BFV:[0-9a-f]{8})",
+        exit_success = "keymgr dpe state = Available[\\s\\S]*PASS!\\r\\n",
+        otp = ":otp_img_secret2_locked_mldsa_prod",
+        rom_ext = "//sw/device/silicon_creator/rom_ext:rom_ext_dice_x509_slot_a_mldsa",
+    ),
+    mldsa_key = {"//sw/device/silicon_creator/lib/ownership/keys/fake:mldsa_keyset": "app_prod_0"},
+    deps = _BOOT_TEST_DEPS + [
+        "//hw/top_earlgrey/sw/autogen:top_earlgrey",
+        "//sw/device/lib/dif:keymgr_dpe",
+    ],
+)
+
+test_suite(
+    name = "mldsa_verified_boot_tests",
+    tags = ["manual"],
+    tests = [
+        "bad_mldsa_padding_test",
+        "bad_mldsa_sig_test",
+        "key_dev_hybrid_mldsa87",
+        "key_prod_hybrid_mldsa87",
+        "key_unauthorized_mldsa",
+        "mldsa_secret2_cdi1_e2e_test",
+        "mldsa_slot_a_bad_sig_slot_b_fallback_test",
+        "stripped_mldsa_all_ext_test",
+        "stripped_mldsa_sig_ext_test",
     ],
 )

@@ -34,6 +34,17 @@ rom_error_t manifest_ext_get_spx_signature(
   return MockManifest::Instance().SpxSignature(manifest, spx_signature);
 }
 
+rom_error_t manifest_ext_get_mldsa87_key(
+    const manifest_t *manifest, const manifest_ext_mldsa87_key_t **mldsa_key) {
+  return MockManifest::Instance().Mldsa87Key(manifest, mldsa_key);
+}
+
+rom_error_t manifest_ext_get_mldsa87_signature(
+    const manifest_t *manifest,
+    const manifest_ext_mldsa87_signature_t **mldsa_signature) {
+  return MockManifest::Instance().Mldsa87Signature(manifest, mldsa_signature);
+}
+
 rom_error_t manifest_ext_get_isfb(const manifest_t *manifest,
                                   const manifest_ext_isfb_t **isfb) {
   return MockManifest::Instance().Isfb(manifest, isfb);

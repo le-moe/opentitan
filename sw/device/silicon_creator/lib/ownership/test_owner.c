@@ -14,9 +14,13 @@
 #include "sw/device/silicon_creator/lib/ownership/keys/fake/activate_ecdsa_p256.h"
 #include "sw/device/silicon_creator/lib/ownership/keys/fake/activate_spx.h"
 #include "sw/device/silicon_creator/lib/ownership/keys/fake/app_dev_ecdsa_p256.h"
+#include "sw/device/silicon_creator/lib/ownership/keys/fake/app_dev_mldsa87.h"
+#include "sw/device/silicon_creator/lib/ownership/keys/fake/app_dev_mldsa_ecdsa_p256.h"
 #include "sw/device/silicon_creator/lib/ownership/keys/fake/app_dev_spx.h"
 #include "sw/device/silicon_creator/lib/ownership/keys/fake/app_dev_spx_ecdsa_p256.h"
 #include "sw/device/silicon_creator/lib/ownership/keys/fake/app_prod_ecdsa_p256.h"
+#include "sw/device/silicon_creator/lib/ownership/keys/fake/app_prod_mldsa87.h"
+#include "sw/device/silicon_creator/lib/ownership/keys/fake/app_prod_mldsa_ecdsa_p256.h"
 #include "sw/device/silicon_creator/lib/ownership/keys/fake/app_prod_spx.h"
 #include "sw/device/silicon_creator/lib/ownership/keys/fake/app_prod_spx_ecdsa_p256.h"
 #include "sw/device/silicon_creator/lib/ownership/keys/fake/app_test_ecdsa_p256.h"
@@ -276,6 +280,48 @@ rom_error_t sku_creator_owner_init(boot_data_t *bootdata) {
                   {
                       .ecdsa = APP_DEV_SPX_ECDSA_P256,
                       .spx = APP_DEV_SPX,
+                  },
+          },
+  };
+
+  app = (owner_application_key_t *)((uintptr_t)app + app->header.length);
+  *app = (owner_application_key_t){
+      .header =
+          {
+              .tag = kTlvTagApplicationKey,
+              .length = kTlvLenApplicationKeyHybridMldsa87,
+          },
+      .key_alg = kOwnershipKeyAlgHybridMldsa87,
+      .key_domain = kOwnerAppDomainProd,
+      .key_diversifier = {0},
+      .usage_constraint = 0,
+      .data =
+          {
+              .hybrid_mldsa =
+                  {
+                      .ecdsa = APP_PROD_MLDSA_ECDSA_P256,
+                      .mldsa = APP_PROD_MLDSA87_TR,
+                  },
+          },
+  };
+
+  app = (owner_application_key_t *)((uintptr_t)app + app->header.length);
+  *app = (owner_application_key_t){
+      .header =
+          {
+              .tag = kTlvTagApplicationKey,
+              .length = kTlvLenApplicationKeyHybridMldsa87,
+          },
+      .key_alg = kOwnershipKeyAlgHybridMldsa87,
+      .key_domain = kOwnerAppDomainDev,
+      .key_diversifier = {0},
+      .usage_constraint = 0,
+      .data =
+          {
+              .hybrid_mldsa =
+                  {
+                      .ecdsa = APP_DEV_MLDSA_ECDSA_P256,
+                      .mldsa = APP_DEV_MLDSA87_TR,
                   },
           },
   };

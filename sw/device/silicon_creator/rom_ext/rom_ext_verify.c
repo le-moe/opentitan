@@ -16,6 +16,9 @@
 #include "sw/device/silicon_creator/lib/ownership/owner_block.h"
 #include "sw/device/silicon_creator/lib/ownership/owner_verify.h"
 #include "sw/device/silicon_creator/lib/sigverify/ecdsa_p256_key.h"
+#include "sw/device/silicon_creator/lib/sigverify/flash_exec.h"
+#include "sw/device/silicon_creator/lib/sigverify/mldsa87_key.h"
+#include "sw/device/silicon_creator/lib/sigverify/mldsa_verify.h"
 #include "sw/device/silicon_creator/lib/sigverify/usage_constraints.h"
 #include "sw/device/silicon_creator/rom_ext/rom_ext_boot_policy.h"
 
@@ -25,6 +28,7 @@ rom_error_t rom_ext_verify(const manifest_t *manifest, char slot_id,
                            owner_application_keyring_t *keyring,
                            size_t *verify_key, owner_config_t *owner_config,
                            uint32_t *isfb_check_count) {
+  *flash_exec = 0;
   RETURN_IF_ERROR(rom_ext_boot_policy_manifest_check(manifest, boot_data));
 
   uint32_t key_id =
@@ -37,6 +41,7 @@ rom_error_t rom_ext_verify(const manifest_t *manifest, char slot_id,
   // `ext_spx_signature->signature` unconditionally would offset an
   // indeterminate pointer and defeat that check.
   const sigverify_spx_signature_t *spx_signature = NULL;
+  bool has_spx = false;
   rom_error_t spx_err = manifest_ext_get_spx_key(manifest, &ext_spx_key);
   spx_err += manifest_ext_get_spx_signature(manifest, &ext_spx_signature);
   switch ((uint32_t)spx_err) {
@@ -44,6 +49,7 @@ rom_error_t rom_ext_verify(const manifest_t *manifest, char slot_id,
       // Both extensions present: valid SPX+ signature.
       key_id ^= sigverify_spx_key_id_get(&ext_spx_key->key);
       spx_signature = &ext_spx_signature->signature;
+      has_spx = true;
       break;
     case kErrorManifestBadExtension * 2:
       // Both extensions absent: ECDSA only.
@@ -51,6 +57,36 @@ rom_error_t rom_ext_verify(const manifest_t *manifest, char slot_id,
     default:
       // One present, one absent: bad configuration.
       return kErrorManifestBadExtension;
+  }
+
+  const sigverify_mldsa87_key_t *mldsa_key = NULL;
+  const sigverify_mldsa87_signature_t *mldsa_signature = NULL;
+  const manifest_ext_mldsa87_key_t *ext_mldsa_key;
+  const manifest_ext_mldsa87_signature_t *ext_mldsa_signature;
+  // Check both ML-DSA extensions before dereferencing either payload so
+  // missing a single extension fails deterministically.
+  bool has_mldsa = false;
+  uint32_t mldsa_err = manifest_ext_get_mldsa87_key(manifest, &ext_mldsa_key);
+  mldsa_err +=
+      manifest_ext_get_mldsa87_signature(manifest, &ext_mldsa_signature);
+  switch (mldsa_err) {
+    case kErrorOk * 2: {
+      uint32_t mldsa_key_id = 0;
+      RETURN_IF_ERROR(
+          sigverify_mldsa87_key_id_get(&ext_mldsa_key->key, &mldsa_key_id));
+      key_id ^= mldsa_key_id;
+      mldsa_key = &ext_mldsa_key->key;
+      mldsa_signature = &ext_mldsa_signature->signature;
+      has_mldsa = true;
+      break;
+    }
+    case kErrorManifestBadExtension * 2:
+      break;
+    default:
+      return kErrorManifestBadExtension;
+  }
+  if (has_spx && has_mldsa) {
+    return kErrorManifestBadExtension;
   }
 
   RETURN_IF_ERROR(owner_keyring_find_key(keyring, key_id, verify_key));
@@ -86,9 +122,9 @@ rom_error_t rom_ext_verify(const manifest_t *manifest, char slot_id,
                 "Unexpected BL0 digest size.");
   memcpy(&boot_measurements.bl0, &act_digest, sizeof(boot_measurements.bl0));
 
-  RETURN_IF_ERROR(owner_verify(
-      key_alg, &keyring->key[*verify_key]->data.base,
-      &manifest->ecdsa_signature, spx_signature, &usage_constraints_from_hw,
+  RETURN_IF_ERROR(owner_verify_app(
+      keyring->key[*verify_key], &manifest->ecdsa_signature, spx_signature,
+      mldsa_key, mldsa_signature, &usage_constraints_from_hw,
       sizeof(usage_constraints_from_hw), NULL, 0, digest_region.start,
       digest_region.length, &act_digest, flash_exec));
 
@@ -113,5 +149,6 @@ rom_error_t rom_ext_verify(const manifest_t *manifest, char slot_id,
   // `flash_exec` and `isfb_check_count`. This is also the reason why don't use
   // `HARDENED_RETURN_IF_ERROR` in the `owner_verify` and `isfb_boot_request`
   // calls.
+  HARDENED_CHECK_EQ(*flash_exec, kSigverifyFlashExec);
   return kErrorOk;
 }

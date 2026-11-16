@@ -26,6 +26,12 @@ class MockManifest : public global_mock::GlobalMock<MockManifest> {
   MOCK_METHOD(rom_error_t, SpxSignature,
               (const manifest_t *,
                const manifest_ext_spx_signature_t **spx_signature));
+  MOCK_METHOD(rom_error_t, Mldsa87Key,
+              (const manifest_t *,
+               const manifest_ext_mldsa87_key_t **mldsa_key));
+  MOCK_METHOD(rom_error_t, Mldsa87Signature,
+              (const manifest_t *,
+               const manifest_ext_mldsa87_signature_t **mldsa_signature));
   MOCK_METHOD(rom_error_t, Isfb,
               (const manifest_t *, const manifest_ext_isfb_t **isfb));
 };

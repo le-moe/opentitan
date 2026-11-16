@@ -13,6 +13,7 @@
 #include "sw/device/silicon_creator/lib/ownership/ownership_activate.h"
 #include "sw/device/silicon_creator/lib/ownership/ownership_unlock.h"
 #include "sw/device/silicon_creator/lib/rescue/rescue.h"
+#include "sw/device/silicon_creator/lib/sigverify/flash_exec.h"
 #include "sw/device/silicon_creator/rom_ext/rom_ext_boot_policy.h"
 #include "sw/device/silicon_creator/rom_ext/rom_ext_boot_policy_ptrs.h"
 
@@ -98,12 +99,15 @@ static rom_error_t boot_svc_min_sec_ver_handler(
         rom_ext_verify(manifest, /*slot_id=*/0, boot_data, &flash_exec, keyring,
                        verify_key, owner_config, isfb_check_count);
     if (error == kErrorOk) {
+      HARDENED_CHECK_EQ(flash_exec, kSigverifyFlashExec);
       slot_a_max_sec_ver = manifest->security_version;
     }
     manifest = rom_ext_boot_policy_manifest_b_get();
+    flash_exec = 0;
     error = rom_ext_verify(manifest, /*slot_id=*/0, boot_data, &flash_exec,
                            keyring, verify_key, owner_config, isfb_check_count);
     if (error == kErrorOk) {
+      HARDENED_CHECK_EQ(flash_exec, kSigverifyFlashExec);
       slot_b_max_sec_ver = manifest->security_version;
     }
 

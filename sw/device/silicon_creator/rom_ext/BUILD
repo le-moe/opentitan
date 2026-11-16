@@ -10,7 +10,7 @@ load("//hw/top:defs.bzl", "opentitan_require_ip", "opentitan_require_top", "open
 load("//rules:cross_platform.bzl", "dual_cc_device_library_of", "dual_cc_library", "dual_inputs")
 load("//rules:linker.bzl", "ld_library")
 load("//rules:manifest.bzl", "manifest")
-load("//rules/opentitan:defs.bzl", "OPENTITAN_CPU", "opentitan_binary")
+load("//rules/opentitan:defs.bzl", "OPENTITAN_CPU", "fpga_params", "opentitan_binary", "opentitan_test")
 load(
     "//sw/device/silicon_creator/rom_ext:defs.bzl",
     "ROM_EXT_VARIATIONS",
@@ -214,6 +214,9 @@ cc_library(
         "//sw/device/silicon_creator/lib/ownership:isfb",
         "//sw/device/silicon_creator/lib/ownership:owner_block",
         "//sw/device/silicon_creator/lib/ownership:owner_verify",
+        "//sw/device/silicon_creator/lib/sigverify:flash_exec",
+        "//sw/device/silicon_creator/lib/sigverify:mldsa87_key",
+        "//sw/device/silicon_creator/lib/sigverify:mldsa_verify",
         "//sw/device/silicon_creator/lib/sigverify:usage_constraints",
     ],
 )
@@ -265,6 +268,7 @@ cc_library(
         "//hw/top:top_lib",
         "//sw/device/lib/base:hardened",
         "//sw/device/lib/coverage:api_asm",
+        "//sw/device/silicon_creator/lib:stack_utilization",
     ],
 )
 
@@ -298,7 +302,9 @@ cc_library(
             "//sw/device/silicon_creator/lib:manifest",
             "//sw/device/silicon_creator/lib:manifest_def",
             "//sw/device/silicon_creator/lib:nvm_ctrl",
+            "//sw/device/silicon_creator/lib:otbn_boot_services",
             "//sw/device/silicon_creator/lib:shutdown",
+            "//sw/device/silicon_creator/lib:stack_utilization",
             "//sw/device/silicon_creator/lib/base:boot_measurements",
             "//sw/device/silicon_creator/lib/base:chip",
             "//sw/device/silicon_creator/lib/base:sec_mmio",
@@ -306,11 +312,14 @@ cc_library(
             "//sw/device/silicon_creator/lib/base:static_dice",
             "//sw/device/silicon_creator/lib/boot_svc:boot_svc_msg",
             "//sw/device/silicon_creator/lib/cert:dice_chain",
+            "//sw/device/silicon_creator/lib/cert:dice_keys",
             "//sw/device/silicon_creator/lib/drivers:ast",
             "//sw/device/silicon_creator/lib/drivers:epmp",
             "//sw/device/silicon_creator/lib/drivers:hmac",
             "//sw/device/silicon_creator/lib/drivers:ibex",
+            "//sw/device/silicon_creator/lib/drivers:kmac",
             "//sw/device/silicon_creator/lib/drivers:lifecycle",
+            "//sw/device/silicon_creator/lib/drivers:otbn",
             "//sw/device/silicon_creator/lib/drivers:otp",
             "//sw/device/silicon_creator/lib/drivers:pinmux",
             "//sw/device/silicon_creator/lib/drivers:retention_sram",
@@ -470,4 +479,57 @@ pkg_filegroup(
     ],
     prefix = "rom_ext",
     tags = ["manual"],
+)
+
+opentitan_binary(
+    name = "rom_ext_dice_x509_slot_a_mldsa",
+    testonly = True,
+    ecdsa_key = {"//sw/device/silicon_creator/rom/keys/fake/ecdsa:ecdsa_keyset": "prod_key_0"},
+    exec_env = ["//hw/top_earlgrey:fpga_cw340"],
+    linker_script = ":ld_slot_a",
+    manifest = ":manifest",
+    mldsa_key = {"//sw/device/silicon_creator/rom/keys/fake/mldsa:mldsa_keyset": "prod_key_0"},
+    slot = "a",
+    transitive_features = ROM_EXT_FEATURES,
+    deps = [
+        ":rom_ext_dice_x509",
+        "//sw/device/lib/crt",
+        "//sw/device/silicon_creator/lib:manifest_def",
+        "//sw/device/silicon_creator/lib/ownership:test_owner",
+        "//sw/device/silicon_creator/lib/ownership/keys/fake",
+        "//sw/device/silicon_creator/lib/rescue:rescue_xmodem",
+        "//sw/device/silicon_creator/rom_ext/imm_section:main_section_dice_x509_slot_a",
+    ],
+)
+
+opentitan_test(
+    name = "stack_utilization_test",
+    srcs = ["//sw/device/silicon_creator/rom_ext/e2e/verified_boot:boot_test"],
+    ecdsa_key = {"//sw/device/silicon_creator/lib/ownership/keys/fake:ecdsa_keyset": "app_prod_mldsa_0"},
+    exec_env = {
+        "//hw/top_earlgrey:fpga_cw340_rom_ext": None,
+    },
+    fpga = fpga_params(
+        exit_failure = "((FAIL|FAULT).*\\n)|(BFV:[0-9a-f]{8})",
+        exit_success = "STK:[0-9A-Fa-f/]+\\r\\n[\\s\\S]*STK:[0-9A-Fa-f/]+\\r\\n[\\s\\S]*PASS!\\r\\n",
+        tags = ["manual"],
+        test_cmd = """
+            --exec="no-op --info '
+            ###########################################################################
+            # This is a manual test. Run it with:
+            #     --test_output=streamed --copt=-DSTACK_UTILIZATION_CHECK
+            ###########################################################################'"
+            --exec="bootstrap --clear-uart=true {firmware}"
+            --exec="console --non-interactive --exit-success='{exit_success}' --exit-failure='{exit_failure}'"
+            no-op
+        """,
+        testopt_bootstrap = "False",
+    ),
+    mldsa_key = {"//sw/device/silicon_creator/lib/ownership/keys/fake:mldsa_keyset": "app_prod_0"},
+    deps = [
+        "//sw/device/lib/base:status",
+        "//sw/device/lib/testing/test_framework:ottf_main",
+        "//sw/device/silicon_creator/lib:boot_log",
+        "//sw/device/silicon_creator/lib/drivers:retention_sram",
+    ],
 )

@@ -22,13 +22,16 @@
 #include "sw/device/silicon_creator/lib/boot_svc/boot_svc_header.h"
 #include "sw/device/silicon_creator/lib/boot_svc/boot_svc_msg.h"
 #include "sw/device/silicon_creator/lib/cert/dice_chain.h"
+#include "sw/device/silicon_creator/lib/cert/dice_keys.h"
 #include "sw/device/silicon_creator/lib/dbg_print.h"
 #include "sw/device/silicon_creator/lib/drivers/ast.h"
 #include "sw/device/silicon_creator/lib/drivers/epmp.h"
 #include "sw/device/silicon_creator/lib/drivers/hmac.h"
 #include "sw/device/silicon_creator/lib/drivers/ibex.h"
 #include "sw/device/silicon_creator/lib/drivers/keymgr_dpe.h"
+#include "sw/device/silicon_creator/lib/drivers/kmac.h"
 #include "sw/device/silicon_creator/lib/drivers/lifecycle.h"
+#include "sw/device/silicon_creator/lib/drivers/otbn.h"
 #include "sw/device/silicon_creator/lib/drivers/otp.h"
 #include "sw/device/silicon_creator/lib/drivers/pinmux.h"
 #include "sw/device/silicon_creator/lib/drivers/retention_sram.h"
@@ -40,6 +43,7 @@
 #include "sw/device/silicon_creator/lib/manifest.h"
 #include "sw/device/silicon_creator/lib/manifest_def.h"
 #include "sw/device/silicon_creator/lib/nvm_ctrl.h"
+#include "sw/device/silicon_creator/lib/otbn_boot_services.h"
 #include "sw/device/silicon_creator/lib/ownership/isfb.h"
 #include "sw/device/silicon_creator/lib/ownership/owner_block.h"
 #include "sw/device/silicon_creator/lib/ownership/owner_verify.h"
@@ -53,6 +57,7 @@
 #include "sw/device/silicon_creator/lib/sigverify/flash_exec.h"
 #include "sw/device/silicon_creator/lib/sigverify/sigverify.h"
 #include "sw/device/silicon_creator/lib/sigverify/sphincsplus/verify.h"
+#include "sw/device/silicon_creator/lib/stack_utilization.h"
 #include "sw/device/silicon_creator/rom_ext/imm_section/imm_section_version.h"
 #include "sw/device/silicon_creator/rom_ext/rom_ext_boot_policy.h"
 #include "sw/device/silicon_creator/rom_ext/rom_ext_boot_policy_ptrs.h"
@@ -60,6 +65,7 @@
 #include "sw/device/silicon_creator/rom_ext/rom_ext_manifest.h"
 #include "sw/device/silicon_creator/rom_ext/rom_ext_verify.h"
 
+#include "hw/top/dt/otp_ctrl.h"                     // Generated.
 #include "hw/top/otp_ctrl_regs.h"                     // Generated.
 #include "hw/top/sram_ctrl_regs.h"                    // Generated.
 #include "hw/top_earlgrey/sw/autogen/top_earlgrey.h"  // Generated.
@@ -235,6 +241,19 @@ static uintptr_t owner_vma_get(const manifest_t *manifest, uintptr_t lma_addr) {
 }
 
 OT_WARN_UNUSED_RESULT
+static hardened_bool_t rom_ext_secret2_locked(void) {
+  uint32_t otp_base = dt_otp_ctrl_primary_reg_block(kDtOtpCtrl);
+  uint32_t digest_lo =
+      sec_mmio_read32(otp_base + OTP_CTRL_SECRET2_DIGEST_0_REG_OFFSET);
+  uint32_t digest_hi =
+      sec_mmio_read32(otp_base + OTP_CTRL_SECRET2_DIGEST_1_REG_OFFSET);
+  if (launder32(digest_lo) == 0 && launder32(digest_hi) == 0) {
+    return kHardenedBoolFalse;
+  }
+  HARDENED_CHECK_NE(digest_lo | digest_hi, 0);
+  return kHardenedBoolTrue;
+}
+
 static rom_error_t rom_ext_boot(boot_data_t *boot_data, boot_log_t *boot_log,
                                 const manifest_t *manifest,
                                 uint32_t *nvm_exec) {
@@ -258,6 +277,19 @@ static rom_error_t rom_ext_boot(boot_data_t *boot_data, boot_log_t *boot_log,
     // If we're not in LockedOwner state, we don't want to derive any valid
     // sealing keys, so set the binding constant to a nonsense value.
     memset(&sealing_binding, 0x55, sizeof(sealing_binding));
+  }
+
+  // ML-DSA verification switches KMAC to SHAKE256 and wipes OTBN DMEM
+  // (including any CDI_0 key saved by imm_section). Restore KMAC keymgr
+  // configuration and re-save CDI_0 when SECRET2 is locked before deriving
+  // or signing CDI_1.
+  HARDENED_RETURN_IF_ERROR(kmac_keymgr_configure());
+  if (launder32(rom_ext_secret2_locked()) == kHardenedBoolTrue) {
+    HARDENED_CHECK_EQ(rom_ext_secret2_locked(), kHardenedBoolTrue);
+    HARDENED_RETURN_IF_ERROR(otbn_boot_attestation_key_save(
+        kDiceKeyCdi0.keygen_seed_idx, *kDiceKeyCdi0.keymgr_dpe_diversifier));
+  } else {
+    HARDENED_CHECK_EQ(rom_ext_secret2_locked(), kHardenedBoolFalse);
   }
 
   // Prepare dice chain builder for CDI_1.
@@ -397,6 +429,8 @@ static rom_error_t rom_ext_boot(boot_data_t *boot_data, boot_log_t *boot_log,
 
   // Jump to OWNER entry point.
   dbg_printf("entry: 0x%x\r\n", (unsigned int)entry_point);
+  // In a normal build, this function inlines to nothing.
+  stack_utilization_print();
   coverage_report();
   coverage_invalidate();
   ((owner_stage_entry_point *)entry_point)();
@@ -477,6 +511,8 @@ static void rom_ext_nvm_protect_self(uint32_t rom_ext_slot) {
 }
 
 static void rom_ext_rescue_lockdown(boot_data_t *boot_data) {
+  // Wipe OTBN DMEM so no transient verification data persists into rescue.
+  OT_DISCARD(sc_otbn_dmem_sec_wipe());
   // Forbid SRAM execution.
   rom_ext_sram_exec(kOwnerSramExecModeDisabledLocked);
   // Set the keymgr dpe to disabled and clear all sideloaded keys.
