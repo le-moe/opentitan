@@ -1,0 +1,604 @@
+diff -ruN a/signing/defs.bzl b/signing/defs.bzl
+--- a/signing/defs.bzl	2026-11-18 10:30:57.097616297 +0100
++++ b/signing/defs.bzl	2026-11-18 10:30:57.239305541 +0100
+@@ -9,6 +9,7 @@
+ load(
+     "//signing:offline.bzl",
+     _offline_fake_ecdsa_sign = "offline_fake_ecdsa_sign",
++    _offline_fake_mldsa_sign = "offline_fake_mldsa_sign",
+     _offline_fake_rsa_sign = "offline_fake_rsa_sign",
+     _offline_fake_spx_sign = "offline_fake_spx_sign",
+     _offline_presigning_artifacts = "offline_presigning_artifacts",
+@@ -44,6 +45,7 @@
+ # Re-export rules for offline signing
+ offline_presigning_artifacts = _offline_presigning_artifacts
+ offline_fake_ecdsa_sign = _offline_fake_ecdsa_sign
++offline_fake_mldsa_sign = _offline_fake_mldsa_sign
+ offline_fake_rsa_sign = _offline_fake_rsa_sign
+ offline_fake_spx_sign = _offline_fake_spx_sign
+ offline_signature_attach = _offline_signature_attach
+diff -ruN a/signing/framing.bzl b/signing/framing.bzl
+--- a/signing/framing.bzl	2026-11-18 10:30:57.098006343 +0100
++++ b/signing/framing.bzl	2026-11-18 10:31:29.271293674 +0100
+@@ -12,7 +12,7 @@
+ load("@bazel_skylib//lib:paths.bzl", "paths")
+ load("//signing:util.bzl", "key_ext")
+ 
+-def presigning_artifacts(ctx, opentitantool, src, manifest_attr, ecdsa_key, rsa_key, spx_key, basename = None, keyname_in_filenames = False):
++def presigning_artifacts(ctx, opentitantool, src, manifest_attr, ecdsa_key, rsa_key, spx_key, mldsa_key = None, basename = None, keyname_in_filenames = False):
+     """Create the pre-signing artifacts for a given input binary.
+ 
+     Applies the manifest and public components of the keys.  Creates the
+@@ -27,18 +27,19 @@
+         ecdsa_key: struct; The ECDSA public key.
+         rsa_key: struct; The RSA public key.
+         spx_key: struct; The SPX+ public key.
++        mldsa_key: struct; Optional ML-DSA public key.
+         basename: str; Optional basename of the outputs.  Defaults to src.basename.
+         keyname_in_filenames: bool; Whether or not to use the key names to construct filenames.
+                               Used in test-signing flows to maintain compatibility with existing
+                               naming conventions for DV tests.
+     Returns:
+-        struct: A struct containing the pre-signing binary, the digest & spx message files, and
++        struct: A struct containing the pre-signing binary, the digest & spx/mldsa message files, and
+                 the JSON signing directive script.
+     """
+     if ecdsa_key and rsa_key:
+         fail("Only one of ECDSA or RSA key should be provided")
+ 
+-    kext = key_ext(ecdsa_key, rsa_key, spx_key)
++    kext = key_ext(ecdsa_key, rsa_key, spx_key, mldsa_key)
+     if not basename:
+         basename = src.basename
+     if keyname_in_filenames:
+@@ -81,6 +82,13 @@
+         selected_spx_key = getattr(spx_key, "file", None)
+         spx_args.append("--spx-key={}".format(selected_spx_key.path))
+         inputs.append(selected_spx_key)
++
++    mldsa_args = []
++    if mldsa_key:
++        selected_mldsa_key = getattr(mldsa_key, "file", None)
++        mldsa_args.append("--mldsa-key={}".format(selected_mldsa_key.path))
++        inputs.append(selected_mldsa_key)
++
+     args = [
+         "--rcfile=",
+         "--quiet",
+@@ -99,7 +107,7 @@
+     ctx.actions.run(
+         outputs = [pre],
+         inputs = inputs,
+-        arguments = args + ecdsa_or_rsa_args + spx_args,
++        arguments = args + ecdsa_or_rsa_args + spx_args + mldsa_args,
+         executable = opentitantool,
+         mnemonic = "PreSigningArtifacts",
+     )
+@@ -143,6 +151,8 @@
+         ))
+ 
+     # Compute message to be signed with SPX+.
++    if spx_key and mldsa_key:
++        fail("Only one of SPX or ML-DSA key should be provided")
+     spxmsg = None
+     if spx_key:
+         if spx_domain.lower() == "prehashedsha256":
+@@ -184,9 +194,37 @@
+                 input = "{}.spx-message".format(basename),
+             ))
+ 
+-    return struct(pre = pre, digest = digest, spxmsg = spxmsg, script = signing_directives)
++    # Compute message to be signed with ML-DSA-87 (pure mode, empty context).
++    mldsamsg = None
++    if mldsa_key:
++        mldsamsg = ctx.actions.declare_file("{}.mldsa-message".format(basename))
++        ctx.actions.run(
++            outputs = [mldsamsg],
++            inputs = [pre],
++            arguments = [
++                "--rcfile=",
++                "--quiet",
++                "image",
++                "message",
++                "--output={}".format(mldsamsg.path),
++                pre.path,
++            ],
++            executable = opentitantool,
++            mnemonic = "PreSigningMldsaMessage",
++        )
++        signing_directives.append(struct(
++            command = "mldsa-sign",
++            id = None,
++            label = mldsa_key.name,
++            format = "PlainText",
++            domain = "Pure",
++            output = "{}.mldsa_sig".format(basename),
++            input = "{}.mldsa-message".format(basename),
++        ))
++
++    return struct(pre = pre, digest = digest, spxmsg = spxmsg, mldsamsg = mldsamsg, script = signing_directives)
+ 
+-def post_signing_attach(ctx, opentitantool, pre, ecdsa_sig, rsa_sig, spx_sig):
++def post_signing_attach(ctx, opentitantool, pre, ecdsa_sig, rsa_sig, spx_sig, mldsa_sig = None):
+     """Attach signatures to an unsigned binary.
+ 
+     Args:
+@@ -196,11 +234,14 @@
+         ecdsa_sig: file; The ECDSA-signed digest of the binary.
+         rsa_sig: file; The RSA-signed digest of the binary.
+         spx_sig: file; The SPX-signed message of the binary.
++        mldsa_sig: file; Optional ML-DSA-signed message of the binary.
+     Returns:
+         file: The signed binary.
+     """
+     if ecdsa_sig and rsa_sig:
+         fail("Only one of ECDSA or RSA signature should be provided")
++    if spx_sig and mldsa_sig:
++        fail("Only one of SPX or ML-DSA signature should be provided")
+ 
+     signed = ctx.actions.declare_file(paths.replace_extension(pre.basename, ".signed.bin"))
+     inputs = [pre]
+@@ -228,6 +269,10 @@
+         inputs.append(spx_sig)
+         args.append("--spx-signature={}".format(spx_sig.path))
+ 
++    if mldsa_sig:
++        inputs.append(mldsa_sig)
++        args.append("--mldsa-signature={}".format(mldsa_sig.path))
++
+     ctx.actions.run(
+         outputs = [signed],
+         inputs = inputs,
+diff -ruN a/signing/offline.bzl b/signing/offline.bzl
+--- a/signing/offline.bzl	2026-11-18 10:30:57.099171560 +0100
++++ b/signing/offline.bzl	2026-11-18 10:30:57.247568884 +0100
+@@ -14,6 +14,7 @@
+     "KeySetInfo",
+     "PreSigningBinaryInfo",
+     "key_from_dict",
++    "local_mldsa_sign",
+     "local_sign",
+     "local_spx_sign",
+     "signing_tool_info",
+@@ -25,6 +26,7 @@
+     ecdsa_key = key_from_dict(ctx.attr.ecdsa_key, "ecdsa_key")
+     rsa_key = key_from_dict(ctx.attr.rsa_key, "rsa_key")
+     spx_key = key_from_dict(ctx.attr.spx_key, "spx_key")
++    mldsa_key = key_from_dict(ctx.attr.mldsa_key, "mldsa_key")
+     digests = []
+     bins = []
+     script = []
+@@ -37,12 +39,15 @@
+             ecdsa_key,
+             rsa_key,
+             spx_key,
++            mldsa_key = mldsa_key,
+         )
+         bins.append(artifacts.pre)
+         digests.append(artifacts.digest)
+         script.extend(artifacts.script)
+         if artifacts.spxmsg:
+             digests.append(artifacts.spxmsg)
++        if artifacts.mldsamsg:
++            digests.append(artifacts.mldsamsg)
+ 
+     default_files = digests
+     if script:
+@@ -76,6 +81,11 @@
+             allow_files = True,
+             doc = "SPX public key to validate this image",
+         ),
++        "mldsa_key": attr.label_keyed_string_dict(
++            providers = [[KeySetInfo], [DefaultInfo]],
++            allow_files = True,
++            doc = "ML-DSA public key to validate this image",
++        ),
+     },
+     toolchains = [
+         OPENTITANTOOL_TOOLCHAIN,
+@@ -93,8 +103,8 @@
+         if file.basename.endswith(".json"):
+             continue
+ 
+-        # Skip any SPHINCS+ messages if we're using the `Pure` domain instead of the `PreHashedSha256` domain
+-        if file.basename.endswith(".spx-message"):
++        # Skip any SPHINCS+ or ML-DSA messages.
++        if file.basename.endswith(".spx-message") or file.basename.endswith(".mldsa-message"):
+             continue
+         _, sig, _ = local_sign(ctx, tool, file, None, rsa_key)
+         outputs.append(sig)
+@@ -126,8 +136,8 @@
+         if file.basename.endswith(".json"):
+             continue
+ 
+-        # Skip any SPHINCS+ messages if we're using the `Pure` domain instead of the `PreHashedSha256` domain
+-        if file.basename.endswith(".spx-message"):
++        # Skip any SPHINCS+ or ML-DSA messages.
++        if file.basename.endswith(".spx-message") or file.basename.endswith(".mldsa-message"):
+             continue
+         sig, _, _ = local_sign(ctx, tool, file, ecdsa_key, None)
+         outputs.append(sig)
+@@ -185,6 +195,36 @@
+     doc = "Create detached SPHINCS+ signatures using on-disk private keys via opentitantool.",
+ )
+ 
++def _offline_fake_mldsa_sign(ctx):
++    opentitantool = ctx.toolchains[OPENTITANTOOL_TOOLCHAIN].tools.executable
++    outputs = []
++    mldsa_key = key_from_dict(ctx.attr.mldsa_key, "mldsa_key")
++    tool, _, _ = signing_tool_info(ctx, ctx.attr.mldsa_key, opentitantool)
++    for file in ctx.files.srcs:
++        if file.basename.endswith(".mldsa-message"):
++            mldsa_sig = local_mldsa_sign(ctx, tool, file, mldsa_key)
++            outputs.append(mldsa_sig)
++    if not outputs:
++        fail("No ML-DSA messages found for ML-DSA signing")
++
++    return [DefaultInfo(files = depset(outputs), data_runfiles = ctx.runfiles(files = outputs))]
++
++offline_fake_mldsa_sign = rule(
++    implementation = _offline_fake_mldsa_sign,
++    attrs = {
++        "srcs": attr.label_list(allow_files = True, doc = "Message files to sign"),
++        "mldsa_key": attr.label_keyed_string_dict(
++            allow_files = True,
++            mandatory = True,
++            doc = "ML-DSA-87 private key to sign this image",
++        ),
++    },
++    toolchains = [
++        OPENTITANTOOL_TOOLCHAIN,
++    ],
++    doc = "Create detached ML-DSA-87 signatures using on-disk private keys via opentitantool.",
++)
++
+ def _offline_signature_attach(ctx):
+     if ctx.files.rsa_signatures and ctx.files.ecdsa_signatures:
+         fail("Only one of RSA or ECDSA signatures should be provided")
+@@ -215,6 +255,11 @@
+         if f not in inputs:
+             fail("SPX signature {} does not have a corresponding entry in srcs".format(sig.path))
+         inputs[f]["spx_sig"] = sig
++    for sig in ctx.files.mldsa_signatures:
++        f, _ = paths.split_extension(sig.basename)
++        if f not in inputs:
++            fail("ML-DSA signature {} does not have a corresponding entry in srcs".format(sig.path))
++        inputs[f]["mldsa_sig"] = sig
+ 
+     outputs = []
+     for f in inputs:
+@@ -231,6 +276,7 @@
+             inputs[f].get("ecdsa_sig"),
+             inputs[f].get("rsa_sig"),
+             inputs[f].get("spx_sig"),
++            mldsa_sig = inputs[f].get("mldsa_sig"),
+         )
+         outputs.append(out)
+     return [DefaultInfo(files = depset(outputs), data_runfiles = ctx.runfiles(files = outputs))]
+@@ -242,6 +288,7 @@
+         "ecdsa_signatures": attr.label_list(allow_files = True, doc = "ECDSA signed digest files"),
+         "rsa_signatures": attr.label_list(allow_files = True, doc = "RSA signed digest files"),
+         "spx_signatures": attr.label_list(allow_files = True, doc = "SPX+ signed digest files"),
++        "mldsa_signatures": attr.label_list(allow_files = True, doc = "ML-DSA signed message files"),
+     },
+     toolchains = [
+         OPENTITANTOOL_TOOLCHAIN,
+diff -ruN a/signing/signature_test.template.sh b/signing/signature_test.template.sh
+--- a/signing/signature_test.template.sh	2026-11-18 10:30:57.099566615 +0100
++++ b/signing/signature_test.template.sh	2026-11-18 10:31:33.635341496 +0100
+@@ -13,11 +13,19 @@
+ VERIFY_ARGS=(@VERIFY_ARGS@)
+ ECDSA_KEY=@ECDSA_KEY@
+ SPX_KEY=@SPX_KEY@
++MLDSA_KEY=@MLDSA_KEY@
+ KEY_ARGS=()
+ RESULT_STATUS=0
++WORK_DIR="$(mktemp -d)"
++trap 'rm -rf "${WORK_DIR}"' EXIT
+ 
+ echo "___Starting signature verification & manifest key verification___"
+ 
++if [[ ${#FILES_TO_CHECK[@]} -eq 0 ]]; then
++  echo "Error: no files provided to verify."
++  exit 1
++fi
++
+ # If an ECDSA key is provided, include it in the manifest update
+ if [[ ! -z "$ECDSA_KEY" ]]; then
+   KEY_ARGS+=("--ecdsa-key=${ECDSA_KEY}")
+@@ -28,53 +36,69 @@
+   KEY_ARGS+=("--spx-key=${SPX_KEY}")
+ fi
+ 
++# If an ML-DSA key is provided, include it in the manifest update
++if [[ ! -z "$MLDSA_KEY" ]]; then
++  KEY_ARGS+=("--mldsa-key=${MLDSA_KEY}")
++fi
++
+ for file in "${FILES_TO_CHECK[@]}"
+ do
+-  # TEST 1: ECDSA key and/or SPX key integrity
++  file_failed=0
++
++  # TEST 1: ECDSA key and/or PQ key integrity
+   # If there are keys to verify, perform manifest update
+   if [[ ${#KEY_ARGS[@]} -ne 0 ]]; then
+     echo -n "Checking key material in ${file}..."
+-        # We process the original file through the tool to ensure it has the
+-        # same serialization (e.g. null extension handling) as the version
+-        # with updated public keys we are about to generate.
+-        ${OPENTITANTOOL}  --rcfile= image manifest update \
+-          --private-keys-sign=false \
+-          --output=/tmp/manifest_test_original.$$ \
+-          ${file}
+-        ${OPENTITANTOOL}  --rcfile= image manifest update \
+-          --private-keys-sign=false \
+-          "${KEY_ARGS[@]}" \
+-          --output=/tmp/manifest_test_key_verify.$$ \
+-          ${file}
+-
+-    cmp /tmp/manifest_test_original.$$ /tmp/manifest_test_key_verify.$$
++    # We process the original file through the tool to ensure it has the
++    # same serialization (e.g. null extension handling) as the version
++    # with updated public keys we are about to generate.
++    orig="${WORK_DIR}/manifest_test_original"
++    updated="${WORK_DIR}/manifest_test_key_verify"
++    if ! "${OPENTITANTOOL}" --rcfile= image manifest update \
++      --private-keys-sign=false \
++      --output="${orig}" \
++      "${file}"; then
++      echo "failed (tool error on baseline manifest)."
++      exit 1
++    fi
++    if ! "${OPENTITANTOOL}" --rcfile= image manifest update \
++      --private-keys-sign=false \
++      "${KEY_ARGS[@]}" \
++      --output="${updated}" \
++      "${file}"; then
++      echo "failed (tool error on keyed manifest)."
++      exit 1
++    fi
+ 
+-    if [[ $? -eq 0 ]]; then
++    if cmp -s "${orig}" "${updated}"; then
+       echo "ok."
+     else
+       echo "failed."
+-      RESULT_STATUS=1
++      file_failed=1
+     fi
+   fi
+ 
+   echo -n "Checking signature of ${file}..."
+ 
+   # TEST 2: Signature verification
+-  ${OPENTITANTOOL} --rcfile= image manifest verify "${VERIFY_ARGS[@]}" ${file}
+-
+-  if [[ $? -eq 0 ]]; then
++  if "${OPENTITANTOOL}" --rcfile= image manifest verify "${VERIFY_ARGS[@]}" "${file}"; then
+     echo "ok."
+   else
+     echo "failed."
+-    RESULT_STATUS=1
++    file_failed=1
+   fi
+-done
+ 
+-# If this is a negative test, invert the result status
+-if [[ "$IS_NEGATIVE_TEST" == "True" ]]; then
+-  echo "Negative test, inverting result status."
+-  RESULT_STATUS=$((1 - $RESULT_STATUS))
+-fi
++  if [[ "$IS_NEGATIVE_TEST" == "True" ]]; then
++    if [[ ${file_failed} -eq 0 ]]; then
++      echo "Negative test error: verification unexpectedly passed for ${file}."
++      RESULT_STATUS=1
++    fi
++  else
++    if [[ ${file_failed} -ne 0 ]]; then
++      RESULT_STATUS=1
++    fi
++  fi
++done
+ 
+ echo "Status: $RESULT_STATUS"
+ 
+diff -ruN a/signing/signing.bzl b/signing/signing.bzl
+--- a/signing/signing.bzl	2026-11-18 10:30:57.099954516 +0100
++++ b/signing/signing.bzl	2026-11-18 10:32:14.103784442 +0100
+@@ -6,7 +6,7 @@
+ """
+ 
+ load("//signing:framing.bzl", "post_signing_attach", "presigning_artifacts")
+-load("//signing:util.bzl", "get_override", "key_from_dict", "signing_tool_info")
++load("//signing:util.bzl", "get_override", "key_from_dict", "local_mldsa_sign", "signing_tool_info")
+ load("//toolchains/opentitantool:opentitantool.bzl", "OPENTITANTOOL_TOOLCHAIN")
+ 
+ def _clear_if_none_key(key_attr):
+@@ -66,7 +66,14 @@
+         key_attr = rsa_attr
+ 
+     rsa_key = key_from_dict(rsa_attr, "rsa_key")
+-    spx_key = key_from_dict(get_override(ctx, "attr.spx_key", kwargs), "spx_key")
++    spx_attr = _clear_if_none_key(get_override(ctx, "attr.spx_key", kwargs))
++    spx_key = key_from_dict(spx_attr, "spx_key")
++    mldsa_attr = _clear_if_none_key(
++        get_override(ctx, "attr.mldsa_key", kwargs) if ("mldsa_key" in kwargs or hasattr(ctx.attr, "mldsa_key")) else None,
++    )
++    mldsa_key = key_from_dict(mldsa_attr, "mldsa_key")
++    if spx_key and mldsa_key:
++        fail("Only one of SPX or ML-DSA key should be provided")
+ 
+     manifest = get_override(ctx, "attr.manifest", kwargs)
+ 
+@@ -78,6 +85,7 @@
+         ecdsa_key,
+         rsa_key,
+         spx_key,
++        mldsa_key = mldsa_key,
+         keyname_in_filenames = True,
+     )
+     tool, signing_func, profile = signing_tool_info(ctx, key_attr, opentitantool)
+@@ -91,6 +99,12 @@
+         spx_key,
+         profile,
+     )
++    mldsa_sig = None
++    if mldsa_key:
++        mldsa_tool, _, _ = signing_tool_info(ctx, mldsa_attr, opentitantool)
++        if mldsa_tool.location != "local":
++            fail("Only local ML-DSA signing is supported; got location {}".format(mldsa_tool.location))
++        mldsa_sig = local_mldsa_sign(ctx, mldsa_tool, artifacts.mldsamsg, mldsa_key)
+     signed = post_signing_attach(
+         ctx,
+         opentitantool,
+@@ -98,14 +112,17 @@
+         ecdsa_sig,
+         rsa_sig,
+         spx_sig,
++        mldsa_sig = mldsa_sig,
+     )
+     return {
+         "pre": artifacts.pre,
+         "digest": artifacts.digest,
+         "spxmsg": artifacts.spxmsg,
++        "mldsamsg": artifacts.mldsamsg,
+         "ecdsa_sig": ecdsa_sig,
+         "rsa_sig": rsa_sig,
+         "spx_sig": spx_sig,
++        "mldsa_sig": mldsa_sig,
+         "signed": signed,
+     }
+ 
+@@ -132,6 +149,10 @@
+             allow_files = True,
+             doc = "SPX public key to validate this image",
+         ),
++        "mldsa_key": attr.label_keyed_string_dict(
++            allow_files = True,
++            doc = "ML-DSA public key to validate this image",
++        ),
+         "manifest": attr.label(allow_single_file = True, mandatory = True),
+     },
+     toolchains = [
+diff -ruN a/signing/test.bzl b/signing/test.bzl
+--- a/signing/test.bzl	2026-11-18 10:30:57.107833534 +0100
++++ b/signing/test.bzl	2026-11-18 10:30:57.257011300 +0100
+@@ -12,21 +12,27 @@
+     keys = []
+     opentitantool = ctx.toolchains[OPENTITANTOOL_TOOLCHAIN].tools.executable
+     script = ctx.actions.declare_file("{}.bash".format(ctx.label.name))
+-    verify_args = ""
++    verify_args = []
+     ecdsa_key = key_from_dict(ctx.attr.ecdsa_key, "ecdsa_key")
+     spx_key = key_from_dict(ctx.attr.spx_key, "spx_key")
++    mldsa_key = key_from_dict(ctx.attr.mldsa_key, "mldsa_key")
+ 
+     selected_ecdsa_key_path = ""
+     selected_spx_key_path = ""
++    selected_mldsa_key_path = ""
+ 
+     if ctx.attr.spx_domain != "":
+-        verify_args = "--spx --domain " + ctx.attr.spx_domain
++        verify_args.extend(["--spx", "--domain", ctx.attr.spx_domain])
+     if ecdsa_key:
+         selected_ecdsa_key_path = ecdsa_key.file.short_path
+         keys.append(ecdsa_key.file)
+     if spx_key:
+         selected_spx_key_path = spx_key.file.short_path
+         keys.append(spx_key.file)
++    if mldsa_key:
++        selected_mldsa_key_path = mldsa_key.file.short_path
++        keys.append(mldsa_key.file)
++        verify_args.append("--mldsa")
+ 
+     files = [f.short_path for f in ctx.files.srcs]
+     ctx.actions.expand_template(
+@@ -35,9 +41,10 @@
+         substitutions = {
+             "@FILES@": " ".join(files),
+             "@OPENTITANTOOL@": opentitantool.short_path,
+-            "@VERIFY_ARGS@": verify_args,
++            "@VERIFY_ARGS@": " ".join(verify_args),
+             "@ECDSA_KEY@": selected_ecdsa_key_path,
+             "@SPX_KEY@": selected_spx_key_path,
++            "@MLDSA_KEY@": selected_mldsa_key_path,
+             "@IS_NEGATIVE_TEST@": str(ctx.attr.negative_test),
+         },
+         is_executable = True,
+@@ -64,6 +71,11 @@
+             allow_files = True,
+             doc = "SPX public key to validate this image",
+         ),
++        "mldsa_key": attr.label_keyed_string_dict(
++            providers = [[KeySetInfo], [DefaultInfo]],
++            allow_files = True,
++            doc = "ML-DSA public key to validate this image",
++        ),
+         "negative_test": attr.bool(
+             default = False,
+             doc = "Whether this is a negative test case.",
+diff -ruN a/signing/util.bzl b/signing/util.bzl
+--- a/signing/util.bzl	2026-11-18 10:30:57.114288597 +0100
++++ b/signing/util.bzl	2026-11-18 10:30:57.259871474 +0100
+@@ -99,13 +99,14 @@
+         return toolinfo, local_sign, None
+     fail("Expected a KeySetInfo or DefaultInfo provider")
+ 
+-def key_ext(ecdsa, rsa, spx):
++def key_ext(ecdsa, rsa, spx, mldsa = None):
+     """Returns the key extension for a given key.
+ 
+     Args:
+         ecdsa: struct; The ECDSA key.
+         rsa: struct; The RSA key.
+         spx: struct; The SPHINCS+ key.
++        mldsa: struct; Optional ML-DSA key.
+     Returns:
+         str: The key extension.
+     """
+@@ -116,10 +117,40 @@
+     else:
+         fail("Expected an ECDSA or RSA key")
+ 
+-    if spx:
+-        return ".{}.{}".format(name, spx.name)
+-    else:
+-        return ".{}".format(name)
++    ext = ".{}.{}".format(name, spx.name) if spx else ".{}".format(name)
++    if mldsa:
++        ext += ".{}".format(mldsa.name)
++    return ext
++
++def local_mldsa_sign(ctx, tool, mldsa_msg, mldsa_key):
++    """Sign a message with a local on-disk ML-DSA-87 private key (empty context).
++
++    Args:
++        ctx: The rule context.
++        tool: SigningToolInfo; A provider referring to the opentitantool binary.
++        mldsa_msg: file; The signed image region message to be signed.
++        mldsa_key: struct; The ML-DSA private key.
++    Returns:
++        file: The ML-DSA signature file.
++    """
++    private_key = mldsa_key.file
++    mldsa_sig = ctx.actions.declare_file(paths.replace_extension(mldsa_msg.basename, ".mldsa_sig"))
++    ctx.actions.run(
++        outputs = [mldsa_sig],
++        inputs = [mldsa_msg, private_key],
++        arguments = [
++            "--rcfile=",
++            "--quiet",
++            "mldsa",
++            "sign",
++            "--output={}".format(mldsa_sig.path),
++            mldsa_msg.path,
++            private_key.path,
++        ],
++        executable = tool.tool,
++        mnemonic = "LocalMldsaSign",
++    )
++    return mldsa_sig
+ 
+ def local_spx_sign(ctx, tool, spx_msg, spx_key):
+     """Sign a digest with a local on-disk SPHINCS+ private key.
