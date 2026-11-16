@@ -380,8 +380,20 @@ void rescue_state_init(rescue_state_t *state, boot_data_t *bootdata,
     state->nvm_limit = kNvmSlotSize;
     state->inactivity_deadline = 0;
   } else {
-    state->nvm_start = (uint32_t)config->start * kNvmPageSize;
-    state->nvm_limit = (uint32_t)(config->start + config->size) * kNvmPageSize;
+    uint32_t nvm_start = (uint32_t)config->start * kNvmPageSize;
+    uint32_t nvm_limit =
+        ((uint32_t)config->start + (uint32_t)config->size) * kNvmPageSize;
+    if (nvm_start < CHIP_ROM_EXT_SIZE_MAX) {
+      nvm_start = CHIP_ROM_EXT_SIZE_MAX;
+    }
+    if (nvm_limit > kNvmSlotSize) {
+      nvm_limit = kNvmSlotSize;
+    }
+    if (nvm_limit < nvm_start) {
+      nvm_limit = nvm_start;
+    }
+    state->nvm_start = nvm_start;
+    state->nvm_limit = nvm_limit;
     uint32_t timeout =
         bitfield_field32_read(config->timeout, RESCUE_TIMEOUT_SECONDS);
     state->inactivity_deadline =

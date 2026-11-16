@@ -4,9 +4,13 @@
 
 #include "sw/device/silicon_creator/lib/ownership/owner_verify.h"
 
+#include "sw/device/lib/base/hardened_memory.h"
 #include "sw/device/silicon_creator/lib/base/util.h"
+#include "sw/device/silicon_creator/lib/drivers/rnd.h"
 #include "sw/device/silicon_creator/lib/error.h"
 #include "sw/device/silicon_creator/lib/sigverify/ecdsa_p256_key.h"
+#include "sw/device/silicon_creator/lib/sigverify/flash_exec.h"
+#include "sw/device/silicon_creator/lib/sigverify/mldsa_verify.h"
 #include "sw/device/silicon_creator/lib/sigverify/sigverify.h"
 #include "sw/device/silicon_creator/lib/sigverify/sphincsplus/verify.h"
 
@@ -112,6 +116,9 @@ rom_error_t owner_verify(uint32_t key_alg, const owner_keydata_t *key,
                          const void *msg_prefix_2, size_t msg_prefix_2_len,
                          const void *msg, size_t msg_len,
                          const hmac_digest_t *digest, uint32_t *flash_exec) {
+  if (key_alg == kOwnershipKeyAlgHybridMldsa87) {
+    return kErrorOwnershipInvalidAlgorithm;
+  }
   uint32_t ec_flash_exec = 0;
   uint32_t spx_flash_exec = 0;
   uint32_t category = key_alg & kOwnershipKeyAlgCategoryMask;
@@ -159,4 +166,72 @@ rom_error_t owner_verify(uint32_t key_alg, const owner_keydata_t *key,
   }
   // Both values should be kErrorOk.  Mix them and return the result.
   return (rom_error_t)((spx + ecdsa) >> 1);
+}
+
+rom_error_t owner_verify_app(const owner_application_key_t *app_key,
+                             const ecdsa_p256_signature_t *ecdsa_sig,
+                             const sigverify_spx_signature_t *spx_sig,
+                             const sigverify_mldsa87_key_t *mldsa_pk,
+                             const sigverify_mldsa87_signature_t *mldsa_sig,
+                             const void *msg_prefix_1, size_t msg_prefix_1_len,
+                             const void *msg_prefix_2, size_t msg_prefix_2_len,
+                             const void *msg, size_t msg_len,
+                             const hmac_digest_t *digest,
+                             uint32_t *flash_exec) {
+  if (flash_exec != NULL) {
+    *flash_exec = 0;
+  }
+  if (app_key == NULL || digest == NULL) {
+    return kErrorOwnershipInvalidAlgorithm;
+  }
+  if (launder32(app_key->key_alg) != kOwnershipKeyAlgHybridMldsa87) {
+    HARDENED_CHECK_NE(app_key->key_alg, kOwnershipKeyAlgHybridMldsa87);
+    if (mldsa_pk != NULL || mldsa_sig != NULL) {
+      return kErrorOwnershipInvalidAlgorithm;
+    }
+    return owner_verify(app_key->key_alg, &app_key->data.base, ecdsa_sig,
+                        spx_sig, msg_prefix_1, msg_prefix_1_len, msg_prefix_2,
+                        msg_prefix_2_len, msg, msg_len, digest, flash_exec);
+  }
+  HARDENED_CHECK_EQ(app_key->key_alg, kOwnershipKeyAlgHybridMldsa87);
+
+  if (mldsa_pk == NULL || mldsa_sig == NULL) {
+    return kErrorSigverifyMldsaNotFound;
+  }
+  if (ecdsa_sig == NULL) {
+    return kErrorSigverifyBadEcdsaSignature;
+  }
+
+  uint32_t tr[kMldsa87TrWords];
+  HARDENED_RETURN_IF_ERROR(mldsa_compute_tr(mldsa_pk, tr));
+  if (launder32(hardened_memeq(tr, app_key->data.hybrid_mldsa.mldsa.digest,
+                               kSigverifyMldsa87KeyDigestWords)) !=
+      kHardenedBoolTrue) {
+    return kErrorSigverifyBadMldsaKey;
+  }
+  HARDENED_CHECK_EQ(hardened_memeq(tr, app_key->data.hybrid_mldsa.mldsa.digest,
+                                   kSigverifyMldsa87KeyDigestWords),
+                    kHardenedBoolTrue);
+
+  uint32_t mu[kMldsa87MuWords];
+  HARDENED_RETURN_IF_ERROR(mldsa_compute_mu(tr, msg_prefix_1, msg_prefix_1_len,
+                                            msg_prefix_2, msg_prefix_2_len, msg,
+                                            msg_len, mu));
+
+  uint32_t exec = 0;
+  if (rnd_uint32() < 0x80000000) {
+    HARDENED_RETURN_IF_ERROR(sigverify_ecdsa_p256_verify(
+        ecdsa_sig, &app_key->data.hybrid_mldsa.ecdsa, digest, &exec));
+    HARDENED_RETURN_IF_ERROR(mldsa_verify(mldsa_pk, mldsa_sig, mu, &exec));
+  } else {
+    HARDENED_RETURN_IF_ERROR(mldsa_verify(mldsa_pk, mldsa_sig, mu, &exec));
+    HARDENED_RETURN_IF_ERROR(sigverify_ecdsa_p256_verify(
+        ecdsa_sig, &app_key->data.hybrid_mldsa.ecdsa, digest, &exec));
+  }
+
+  if (flash_exec != NULL) {
+    *flash_exec = exec;
+  }
+  HARDENED_CHECK_EQ(exec, kSigverifyFlashExec);
+  return kErrorOk;
 }

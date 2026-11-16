@@ -239,7 +239,7 @@ manifest(d = {
 opentitan_test(
     name = "bad_spx_manifest_test",
     srcs = [":boot_test"],
-    ecdsa_key = {"//sw/device/silicon_creator/lib/ownership/keys/fake:ecdsa_keyset": "app_prod_0"},
+    ecdsa_key = {"//sw/device/silicon_creator/lib/ownership/keys/fake:ecdsa_keyset": "app_prod_spx_0"},
     exec_env = {
         "//hw/top_earlgrey:fpga_cw340_rom_ext": None,
     },
@@ -267,7 +267,7 @@ _KEYS = {
         "exit_failure": DEFAULT_TEST_FAILURE_MSG,
     },
     "dev_hybrid_spx_prehashed": {
-        "ecdsa": {"//sw/device/silicon_creator/lib/ownership/keys/fake:ecdsa_keyset": "app_dev_0"},
+        "ecdsa": {"//sw/device/silicon_creator/lib/ownership/keys/fake:ecdsa_keyset": "app_dev_spx_0"},
         "spx": {"//sw/device/silicon_creator/lib/ownership/keys/fake:spx_keyset": "app_dev_0"},
         "exit_success": DEFAULT_TEST_SUCCESS_MSG,
         "exit_failure": DEFAULT_TEST_FAILURE_MSG,
@@ -279,7 +279,7 @@ _KEYS = {
         "exit_failure": DEFAULT_TEST_FAILURE_MSG,
     },
     "prod_hybrid_spx_pure": {
-        "ecdsa": {"//sw/device/silicon_creator/lib/ownership/keys/fake:ecdsa_keyset": "app_prod_0"},
+        "ecdsa": {"//sw/device/silicon_creator/lib/ownership/keys/fake:ecdsa_keyset": "app_prod_spx_0"},
         "spx": {"//sw/device/silicon_creator/lib/ownership/keys/fake:spx_keyset": "app_prod_0"},
         "exit_success": DEFAULT_TEST_SUCCESS_MSG,
         "exit_failure": DEFAULT_TEST_FAILURE_MSG,
@@ -347,7 +347,7 @@ manifest(d = {
 opentitan_test(
     name = "isfb_boot_test",
     srcs = [":boot_test"],
-    ecdsa_key = {"//sw/device/silicon_creator/lib/ownership/keys/fake:ecdsa_keyset": "app_prod_0"},
+    ecdsa_key = {"//sw/device/silicon_creator/lib/ownership/keys/fake:ecdsa_keyset": "app_prod_spx_0"},
     exec_env = {
         "//hw/top_earlgrey:fpga_cw340_rom_ext": None,
     },

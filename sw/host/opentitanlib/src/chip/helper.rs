@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use clap::Args;
 use sphincsplus::{DecodeKey, SpxSecretKey};
 use std::fs::File;
@@ -44,6 +44,9 @@ pub struct OwnershipUnlockParams {
 impl OwnershipUnlockParams {
     /// Applies the parameters to the unlock request.
     pub fn apply(&self, unlock: &mut OwnershipUnlockRequest) -> Result<Option<DetachedSignature>> {
+        if self.algorithm.is_mldsa() {
+            bail!("{} is only supported for application keys", self.algorithm);
+        }
         if let Some(mode) = &self.mode {
             unlock.unlock_mode = *mode;
         }
@@ -135,6 +138,9 @@ impl OwnershipActivateParams {
         &self,
         activate: &mut OwnershipActivateRequest,
     ) -> Result<Option<DetachedSignature>> {
+        if self.algorithm.is_mldsa() {
+            bail!("{} is only supported for application keys", self.algorithm);
+        }
         if let Some(nonce) = &self.nonce {
             activate.nonce = *nonce;
         }
@@ -184,5 +190,27 @@ impl OwnershipActivateParams {
         };
         let signature = self.apply(&mut activate)?;
         Ok((activate, signature))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_rejects_mldsa_for_unlock_and_activate() {
+        let unlock_params = OwnershipUnlockParams {
+            algorithm: OwnershipKeyAlg::HybridMldsa87,
+            ..Default::default()
+        };
+        let mut unlock_req = OwnershipUnlockRequest::default();
+        assert!(unlock_params.apply(&mut unlock_req).is_err());
+
+        let activate_params = OwnershipActivateParams {
+            algorithm: OwnershipKeyAlg::HybridMldsa87,
+            ..Default::default()
+        };
+        let mut activate_req = OwnershipActivateRequest::default();
+        assert!(activate_params.apply(&mut activate_req).is_err());
     }
 }

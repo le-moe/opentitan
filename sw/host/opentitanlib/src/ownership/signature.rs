@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 
-use anyhow::{Result, anyhow};
+use anyhow::{Result, anyhow, ensure};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use serde::Deserialize;
 use serde_annotate::Annotate;
@@ -65,6 +65,13 @@ impl DetachedSignature {
         src.read_u32_into::<LittleEndian>(&mut reserved)?;
         let command = src.read_u32::<LittleEndian>()?;
         let algorithm = OwnershipKeyAlg(src.read_u32::<LittleEndian>()?);
+        ensure!(
+            !algorithm.is_mldsa(),
+            Error::InvalidSignature(anyhow!(
+                "Algorithm {} does not support detached signatures",
+                algorithm
+            ))
+        );
         let nonce = src.read_u64::<LittleEndian>()?;
         let ecdsa = if algorithm.is_ecdsa() {
             Some(EcdsaRawSignature::read(src)?)
@@ -90,6 +97,13 @@ impl DetachedSignature {
     }
 
     pub fn write(&self, dest: &mut impl Write) -> Result<()> {
+        ensure!(
+            !self.algorithm.is_mldsa(),
+            Error::InvalidSignature(anyhow!(
+                "Algorithm {} does not support detached signatures",
+                self.algorithm
+            ))
+        );
         let header = TlvHeader::new(TlvTag::DetachedSignature, Self::SIZE, "0.0");
         header.write(dest)?;
         for x in &self.reserved {
@@ -138,6 +152,13 @@ impl DetachedSignature {
         ecdsa_key: Option<&EcdsaPrivateKey>,
         spx_key: Option<&SpxSecretKey>,
     ) -> Result<Self> {
+        ensure!(
+            !algorithm.is_mldsa(),
+            Error::SignFailed(anyhow!(
+                "Algorithm {} does not support detached signatures",
+                algorithm
+            ))
+        );
         let digest = Sha256Digest::hash(data);
         let ecdsa = if algorithm.is_ecdsa() {
             let key = ecdsa_key.ok_or_else(|| {
@@ -181,6 +202,13 @@ impl DetachedSignature {
         ecdsa_signature_path: Option<&Path>,
         spx_signature_path: Option<&Path>,
     ) -> Result<Self> {
+        ensure!(
+            !algorithm.is_mldsa(),
+            Error::InvalidSignature(anyhow!(
+                "Algorithm {} does not support detached signatures",
+                algorithm
+            ))
+        );
         let mut ecdsa_sig: Option<EcdsaRawSignature> = None;
         let mut spx_sig: Option<Vec<u8>> = None;
 
@@ -206,5 +234,34 @@ impl DetachedSignature {
             spx: spx_sig,
             ..Default::default()
         })
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_detached_signature_rejects_hybrid_mldsa87() {
+        assert!(
+            DetachedSignature::new(b"msg", 0, OwnershipKeyAlg::HybridMldsa87, 0, None, None)
+                .is_err()
+        );
+        assert!(
+            DetachedSignature::from_raw_signatures(
+                0,
+                OwnershipKeyAlg::HybridMldsa87,
+                0,
+                None,
+                None,
+            )
+            .is_err()
+        );
+        let sig = DetachedSignature {
+            algorithm: OwnershipKeyAlg::HybridMldsa87,
+            ..Default::default()
+        };
+        let mut out = Vec::new();
+        assert!(sig.write(&mut out).is_err());
     }
 }

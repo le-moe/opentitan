@@ -15,8 +15,10 @@
 #include "sw/device/silicon_creator/lib/ownership/keys/fake/activate_spx.h"
 #include "sw/device/silicon_creator/lib/ownership/keys/fake/app_dev_ecdsa_p256.h"
 #include "sw/device/silicon_creator/lib/ownership/keys/fake/app_dev_spx.h"
+#include "sw/device/silicon_creator/lib/ownership/keys/fake/app_dev_spx_ecdsa_p256.h"
 #include "sw/device/silicon_creator/lib/ownership/keys/fake/app_prod_ecdsa_p256.h"
 #include "sw/device/silicon_creator/lib/ownership/keys/fake/app_prod_spx.h"
+#include "sw/device/silicon_creator/lib/ownership/keys/fake/app_prod_spx_ecdsa_p256.h"
 #include "sw/device/silicon_creator/lib/ownership/keys/fake/app_test_ecdsa_p256.h"
 #include "sw/device/silicon_creator/lib/ownership/keys/fake/owner_ecdsa_p256.h"
 #include "sw/device/silicon_creator/lib/ownership/keys/fake/owner_spx.h"
@@ -68,7 +70,7 @@
 #ifdef TEST_OWNER_KEY_ALG_SPX_PURE
 #define TEST_OWNER_KEY_ALG kOwnershipKeyAlgSpxPure
 #endif
-#ifdef TEST_OWNER_KEY_ALG_HYBRID_SPX_PREHASH
+#ifdef TEST_OWNER_KEY_ALG_SPX_PREHASH
 #define TEST_OWNER_KEY_ALG kOwnershipKeyAlgSpxPrehash
 #endif
 #define OWNER_KEYDATA \
@@ -251,7 +253,7 @@ rom_error_t sku_creator_owner_init(boot_data_t *bootdata) {
           {
               .hybrid =
                   {
-                      .ecdsa = APP_PROD_ECDSA_P256,
+                      .ecdsa = APP_PROD_SPX_ECDSA_P256,
                       .spx = APP_PROD_SPX,
                   },
           },
@@ -272,7 +274,7 @@ rom_error_t sku_creator_owner_init(boot_data_t *bootdata) {
           {
               .hybrid =
                   {
-                      .ecdsa = APP_DEV_ECDSA_P256,
+                      .ecdsa = APP_DEV_SPX_ECDSA_P256,
                       .spx = APP_DEV_SPX,
                   },
           },

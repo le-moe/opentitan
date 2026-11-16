@@ -58,6 +58,7 @@ const owner_detached_signature_t *ownership_signature_scan(
     if (sig->header.tag == kTlvTagDetachedSignature &&
         sig->header.length == sizeof(owner_detached_signature_t) &&
         sig->header.version.major == 0 && sig->command == command &&
+        sig->algorithm != kOwnershipKeyAlgHybridMldsa87 &&
         (nonce_equal(&sig->nonce, &zero) || nonce_equal(&sig->nonce, nonce))) {
       return sig;
     }
@@ -74,6 +75,11 @@ rom_error_t ownership_key_validate(size_t page, ownership_key_t key,
   const ecdsa_p256_signature_t *ecdsa = NULL;
   const sigverify_spx_signature_t *spx = NULL;
   uint32_t key_alg = owner_page[page].ownership_key_alg;
+  if (key_alg == kOwnershipKeyAlgHybridMldsa87) {
+    // ML-DSA-87 is supported only for APPK verification, not owner/boot_svc
+    // keys.
+    return kErrorOwnershipInvalidAlgorithm;
+  }
   if (!is_signature_empty(signature)) {
     if (key_alg != kOwnershipKeyAlgEcdsaP256) {
       return kErrorOwnershipInvalidAlgorithm;
@@ -84,6 +90,9 @@ rom_error_t ownership_key_validate(size_t page, ownership_key_t key,
         NVM_DATA_BASE_ADDR, NVM_DATA_SIZE_BYTES, command, nonce);
     if (detached == NULL) {
       return kErrorOwnershipSignatureNotFound;
+    }
+    if (detached->algorithm != key_alg) {
+      return kErrorOwnershipInvalidAlgorithm;
     }
     uint32_t category =
         owner_page[page].ownership_key_alg & kOwnershipKeyAlgCategoryMask;

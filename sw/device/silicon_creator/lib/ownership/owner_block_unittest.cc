@@ -1149,17 +1149,41 @@ TEST_P(ApplicationKeyCheckTest, KeyAlgo) {
   rom_error_t expect;
   std::tie(key_alg, expect) = GetParam();
 
+  uint16_t len = sizeof(owner_application_key_t);
+  switch (key_alg) {
+    case kOwnershipKeyAlgEcdsaP256:
+      len = kTlvLenApplicationKeyEcdsa;
+      break;
+    case kOwnershipKeyAlgHybridSpxPure:
+    case kOwnershipKeyAlgHybridSpxPrehash:
+      len = kTlvLenApplicationKeyHybrid;
+      break;
+    case kOwnershipKeyAlgHybridMldsa87:
+      len = kTlvLenApplicationKeyHybridMldsa87;
+      break;
+    default:
+      break;
+  }
+
   owner_application_key_t key = {
       .header =
           {
               .tag = kTlvTagApplicationKey,
-              .length = sizeof(owner_application_key_t),
+              .length = len,
           },
       .key_alg = key_alg,
   };
 
   rom_error_t error = owner_block_application_key_check(&key);
   EXPECT_EQ(error, expect);
+  if (expect == kErrorOk) {
+    key.header.length = len - 4;
+    EXPECT_EQ(owner_block_application_key_check(&key),
+              kErrorOwnershipInvalidTagLength);
+    key.header.length = len + 4;
+    EXPECT_EQ(owner_block_application_key_check(&key),
+              kErrorOwnershipInvalidTagLength);
+  }
 }
 
 // clang-format off
@@ -1169,6 +1193,7 @@ testing::Values(
     std::make_tuple(kOwnershipKeyAlgEcdsaP256, kErrorOk),
     std::make_tuple(kOwnershipKeyAlgHybridSpxPure, kErrorOk),
     std::make_tuple(kOwnershipKeyAlgHybridSpxPrehash, kErrorOk),
+    std::make_tuple(kOwnershipKeyAlgHybridMldsa87, kErrorOk),
     // Currently unsupported algorithms:
     std::make_tuple(kOwnershipKeyAlgSpxPure, kErrorOwnershipInvalidAlgorithm),
     std::make_tuple(kOwnershipKeyAlgSpxPrehash, kErrorOwnershipInvalidAlgorithm),
@@ -1283,5 +1308,52 @@ testing::Values(
     std::make_tuple(1, 9, kErrorOwnershipBadInfoPage)
 ));
 // clang-format on
+
+TEST_F(OwnerBlockTest, ApplicationKeyCheckHybridMldsa87) {
+  owner_application_key_t key = {
+      .header =
+          {
+              .tag = kTlvTagApplicationKey,
+              .length = kTlvLenApplicationKeyHybridMldsa87,
+          },
+      .key_alg = kOwnershipKeyAlgHybridMldsa87,
+  };
+  EXPECT_EQ(owner_block_application_key_check(&key), kErrorOk);
+
+  key.header.length = kTlvLenApplicationKeyHybridMldsa87 - 4;
+  EXPECT_EQ(owner_block_application_key_check(&key),
+            kErrorOwnershipInvalidTagLength);
+}
+
+TEST_F(OwnerBlockTest, OwnerKeyringFindHybridMldsa87) {
+  const uint32_t ecdsa_id = 0x11223344;
+  const uint32_t mldsa_digest0 = 0x55667788;
+  owner_application_key_t key = {
+      .header =
+          {
+              .tag = kTlvTagApplicationKey,
+              .length = kTlvLenApplicationKeyHybridMldsa87,
+          },
+      .key_alg = kOwnershipKeyAlgHybridMldsa87,
+      .data =
+          {
+              .hybrid_mldsa =
+                  {
+                      .ecdsa = {.x = {ecdsa_id}},
+                      .mldsa = {.digest = {mldsa_digest0}},
+                  },
+          },
+  };
+  owner_application_keyring_t keyring = {
+      .length = 1,
+      .key = {&key},
+  };
+  size_t index = 99;
+  EXPECT_EQ(owner_keyring_find_key(&keyring, ecdsa_id ^ mldsa_digest0, &index),
+            kErrorOk);
+  EXPECT_EQ(index, 0);
+  EXPECT_EQ(owner_keyring_find_key(&keyring, ecdsa_id, &index),
+            kErrorOwnershipKeyNotFound);
+}
 
 }  // namespace

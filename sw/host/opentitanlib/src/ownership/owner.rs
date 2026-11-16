@@ -145,6 +145,13 @@ impl OwnerBlock {
     }
 
     pub fn write(&self, dest: &mut impl Write) -> Result<()> {
+        ensure!(
+            !self.ownership_key_alg.is_mldsa(),
+            CryptoError::InvalidPublicKey(anyhow!(
+                "Algorithm {} is only supported for application keys",
+                self.ownership_key_alg
+            ))
+        );
         self.header.write(dest)?;
         dest.write_u32::<LittleEndian>(self.config_version)?;
         dest.write_u32::<LittleEndian>(u32::from(self.sram_exec))?;
@@ -186,6 +193,13 @@ impl OwnerBlock {
         let config_version = src.read_u32::<LittleEndian>()?;
         let sram_exec = SramExecMode(src.read_u32::<LittleEndian>()?);
         let ownership_key_alg = OwnershipKeyAlg(src.read_u32::<LittleEndian>()?);
+        ensure!(
+            !ownership_key_alg.is_mldsa(),
+            CryptoError::InvalidPublicKey(anyhow!(
+                "Algorithm {} is only supported for application keys",
+                ownership_key_alg
+            ))
+        );
         let update_mode = OwnershipUpdateMode(src.read_u32::<LittleEndian>()?);
         let min_security_version_bl0 = MinSecurityVersion(src.read_u32::<LittleEndian>()?);
         let lock_constraint = src.read_u32::<LittleEndian>()?;
@@ -725,6 +739,26 @@ r#"00000000: 4f 57 4e 52 00 08 00 00 00 00 00 00 4c 4e 45 58  OWNR........LNEX
         let doc = serde_annotate::serialize(&own)?.to_json5().to_string();
         eprintln!("{}", doc);
         assert_eq!(doc, OWNER_JSON);
+        Ok(())
+    }
+
+    #[test]
+    fn test_owner_rejects_hybrid_mldsa87() -> Result<()> {
+        let mut own = OwnerBlock {
+            ownership_key_alg: OwnershipKeyAlg::HybridMldsa87,
+            ..Default::default()
+        };
+        let mut out = Vec::new();
+        assert!(own.write(&mut out).is_err());
+
+        let buf = hexdump_parse(OWNER_BIN)?;
+        let mut bad_buf = buf.clone();
+        bad_buf[16..20].copy_from_slice(b"Hym+");
+        let mut cur = std::io::Cursor::new(&bad_buf);
+        let header = TlvHeader::read(&mut cur)?;
+        assert!(OwnerBlock::read(&mut cur, header).is_err());
+
+        assert!(own.detached_sign(0, None, None).is_err());
         Ok(())
     }
 }

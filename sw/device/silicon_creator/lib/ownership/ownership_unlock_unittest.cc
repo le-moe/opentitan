@@ -260,6 +260,25 @@ TEST_F(OwnershipUnlockTest, UnlockEndorsedBadNonce) {
   EXPECT_EQ(bootdata_.ownership_state, kOwnershipStateLockedOwner);
 }
 
+TEST_F(OwnershipUnlockTest, UnlockEndorsedRejectsHybridMldsa87) {
+  message_.ownership_unlock_req.unlock_mode = kBootSvcUnlockEndorsed;
+  message_.ownership_unlock_req.next_owner_key_alg =
+      kOwnershipKeyAlgHybridMldsa87;
+  EXPECT_CALL(ownership_key_,
+              validate(0,
+                       static_cast<ownership_key_t>(kOwnershipKeyUnlock |
+                                                    kOwnershipKeyRecovery),
+                       kUnlock, _, _, _, _, _))
+      .WillOnce(DoAll(SetArgPointee<7>(kSigverifyFlashExec), Return(kErrorOk)));
+  EXPECT_CALL(lifecycle_, DeviceId(_))
+      .WillOnce(SetArgPointee<0>((lifecycle_device_id_t){0}));
+  EXPECT_CALL(hdr_, Finalize(_, _, _));
+
+  rom_error_t error = ownership_unlock_handler(&message_, &bootdata_);
+  EXPECT_EQ(error, kErrorOwnershipInvalidAlgorithm);
+  EXPECT_EQ(bootdata_.ownership_state, kOwnershipStateLockedOwner);
+}
+
 // Test that requesting UnlockedEndorsed all non-LockedOwner states fails.
 TEST_P(OwnershipUnlockEndorsedStateTest, InvalidState) {
   message_.ownership_unlock_req.unlock_mode = kBootSvcUnlockEndorsed;

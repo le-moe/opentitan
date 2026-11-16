@@ -23,6 +23,13 @@ class MockOwnerVerify : public global_mock::GlobalMock<MockOwnerVerify> {
                const sigverify_spx_signature_t *, const void *, size_t,
                const void *, size_t, const void *, size_t,
                const hmac_digest_t *, uint32_t *));
+  MOCK_METHOD(rom_error_t, verify_app,
+              (const owner_application_key_t *, const ecdsa_p256_signature_t *,
+               const sigverify_spx_signature_t *,
+               const sigverify_mldsa87_key_t *,
+               const sigverify_mldsa87_signature_t *, const void *, size_t,
+               const void *, size_t, const void *, size_t,
+               const hmac_digest_t *, uint32_t *));
 };
 
 }  // namespace internal

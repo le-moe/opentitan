@@ -285,6 +285,7 @@ rust_library(
         "@crate_index//:serde_json",
         "@crate_index//:serialport",
         "@crate_index//:sha2",
+        "@crate_index//:sha3",
         "@crate_index//:shellwords",
         "@crate_index//:strum",
         "@crate_index//:tempfile",

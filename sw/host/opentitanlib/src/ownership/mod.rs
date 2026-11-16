@@ -18,7 +18,8 @@ pub use flash::{FlashFlags, OwnerFlashConfig, OwnerFlashRegion};
 pub use flash_info::{OwnerFlashInfoConfig, OwnerInfoPage};
 pub use isfb::OwnerIsfbConfig;
 pub use misc::{
-    DetachedSignatureCommand, HybridRawPublicKey, KeyMaterial, OwnershipKeyAlg, TlvHeader, TlvTag,
+    DetachedSignatureCommand, HybridMldsa87RawPublicKey, HybridRawPublicKey, KeyMaterial,
+    OwnershipKeyAlg, TlvHeader, TlvTag,
 };
 pub use owner::{
     MinSecurityVersion, OwnerBlock, OwnerConfigItem, OwnershipUpdateMode, SramExecMode,

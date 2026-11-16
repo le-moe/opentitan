@@ -29,6 +29,7 @@ cc_library(
         "//sw/device/lib/base:bitfield",
         "//sw/device/silicon_creator/lib:nonce",
         "//sw/device/silicon_creator/lib/sigverify:ecdsa_p256_key",
+        "//sw/device/silicon_creator/lib/sigverify:mldsa87_key",
         "//sw/device/silicon_creator/lib/sigverify:spx_key",
     ],
 )
@@ -311,7 +312,11 @@ dual_cc_library(
     ),
     deps = dual_inputs(
         device = [
+            "//sw/device/lib/base:hardened_memory",
+            "//sw/device/silicon_creator/lib/drivers:rnd",
             "//sw/device/silicon_creator/lib/sigverify",
+            "//sw/device/silicon_creator/lib/sigverify:flash_exec",
+            "//sw/device/silicon_creator/lib/sigverify:mldsa_verify",
         ],
         host = [
             "//sw/device/lib/base:global_mock",
@@ -322,6 +327,7 @@ dual_cc_library(
             ":datatypes",
             "//sw/device/silicon_creator/lib/base:util",
             "//sw/device/silicon_creator/lib/drivers:hmac",
+            "//sw/device/silicon_creator/lib/sigverify:mldsa87_key",
             "//sw/device/silicon_creator/lib:error",
         ],
     ),
@@ -332,7 +338,16 @@ opentitan_test(
     srcs = ["owner_verify_functest.c"],
     exec_env = EARLGREY_TEST_ENVS,
     deps = [
+        ":datatypes",
         ":owner_verify",
+        "//sw/device/lib/base:hardened",
+        "//sw/device/lib/testing/test_framework:check",
         "//sw/device/lib/testing/test_framework:ottf_main",
+        "//sw/device/silicon_creator/lib:otbn_boot_services",
+        "//sw/device/silicon_creator/lib/base:sec_mmio",
+        "//sw/device/silicon_creator/lib/drivers:hmac",
+        "//sw/device/silicon_creator/lib/ownership/keys/fake:includes",
+        "//sw/device/silicon_creator/lib/sigverify:flash_exec",
+        "//sw/device/silicon_creator/lib/sigverify:mldsa_verify",
     ],
 )

@@ -143,17 +143,23 @@ hardened_bool_t rom_ext_nvm_exclusive(uint32_t start, uint32_t end) {
 
 rom_error_t owner_block_application_key_check(
     const owner_application_key_t *key) {
-  if (key->header.length < offsetof(owner_application_key_t, data) ||
-      key->header.length > sizeof(owner_application_key_t)) {
-    return kErrorOwnershipInvalidTagLength;
-  }
+  size_t expected_len = 0;
   switch (key->key_alg) {
     case kOwnershipKeyAlgEcdsaP256:
+      expected_len = kTlvLenApplicationKeyEcdsa;
+      break;
     case kOwnershipKeyAlgHybridSpxPure:
     case kOwnershipKeyAlgHybridSpxPrehash:
+      expected_len = kTlvLenApplicationKeyHybrid;
+      break;
+    case kOwnershipKeyAlgHybridMldsa87:
+      expected_len = kTlvLenApplicationKeyHybridMldsa87;
       break;
     default:
       return kErrorOwnershipInvalidAlgorithm;
+  }
+  if (key->header.length != expected_len) {
+    return kErrorOwnershipInvalidTagLength;
   }
   return kErrorOk;
 }
@@ -238,14 +244,14 @@ rom_error_t owner_block_parse(const owner_block_t *block,
         if (item->version.major != 0)
           return kErrorOwnershipAPPKVersion;
 
+        HARDENED_RETURN_IF_ERROR(owner_block_application_key_check(
+            (const owner_application_key_t *)item));
         if (check_only == kHardenedBoolFalse) {
-          if (keyring->length < ARRAYSIZE(keyring->key)) {
-            keyring->key[keyring->length++] =
-                (const owner_application_key_t *)item;
+          if (keyring->length >= ARRAYSIZE(keyring->key)) {
+            return kErrorOwnershipInvalidTagLength;
           }
-        } else {
-          HARDENED_RETURN_IF_ERROR(owner_block_application_key_check(
-              (const owner_application_key_t *)item));
+          keyring->key[keyring->length++] =
+              (const owner_application_key_t *)item;
         }
         break;
       case kTlvTagNvmConfig:
@@ -587,9 +593,13 @@ rom_error_t owner_block_rescue_apply(const owner_rescue_config_t *rescue) {
 rom_error_t owner_keyring_find_key(const owner_application_keyring_t *keyring,
                                    uint32_t key_id, size_t *index) {
   for (size_t i = 0; i < keyring->length && i < ARRAYSIZE(keyring->key); ++i) {
+    uint32_t alg = keyring->key[i]->key_alg;
     uint32_t id = keyring->key[i]->data.id;
-    if ((keyring->key[i]->key_alg & kOwnershipKeyAlgCategoryMask) ==
-        kOwnershipKeyAlgCategoryHybrid) {
+    if (alg == kOwnershipKeyAlgHybridMldsa87) {
+      // The ID of a hybrid ML-DSA-87 key is ECDSA ID xor tr[0].
+      id ^= keyring->key[i]->data.hybrid_mldsa.mldsa.digest[0];
+    } else if ((alg & kOwnershipKeyAlgCategoryMask) ==
+               kOwnershipKeyAlgCategoryHybrid) {
       // The ID of a hybrid key is the xor of the IDs of each key.
       id ^= keyring->key[i]->data.hybrid.spx.data[0];
     }

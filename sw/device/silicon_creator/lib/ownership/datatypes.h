@@ -11,6 +11,7 @@
 #include "sw/device/lib/base/macros.h"
 #include "sw/device/silicon_creator/lib/nonce.h"
 #include "sw/device/silicon_creator/lib/sigverify/ecdsa_p256_key.h"
+#include "sw/device/silicon_creator/lib/sigverify/mldsa87_key.h"
 #include "sw/device/silicon_creator/lib/sigverify/spx_key.h"
 
 #ifdef __cplusplus
@@ -21,6 +22,12 @@ typedef struct hybrid_key {
   ecdsa_p256_public_key_t ecdsa;
   sigverify_spx_key_t spx;
 } hybrid_key_t;
+
+typedef struct hybrid_mldsa87_key {
+  ecdsa_p256_public_key_t ecdsa;
+  sigverify_mldsa87_key_digest_t mldsa;
+} hybrid_mldsa87_key_t;
+OT_ASSERT_SIZE(hybrid_mldsa87_key_t, 112);
 
 /**
  * An owner_key can be either a ECDSA P256 or SPX+ key.  The type of the key
@@ -38,6 +45,29 @@ typedef union owner_key_data {
   /** A key ID is the first 32-bit word of the key data */
   uint32_t id;
 } owner_keydata_t;
+OT_ASSERT_SIZE(owner_keydata_t, 96);
+
+/**
+ * An application key in an `APPK` TLV entry can hold ECDSA, SPX+, Hybrid-SPX,
+ * or Hybrid ECDSA & ML-DSA-87 (64-byte ECDSA + 48-byte `tr` prefix).
+ */
+typedef union owner_app_key_data {
+  /** ECDSA P256 public key */
+  ecdsa_p256_public_key_t ecdsa;
+  /** SPHINCS+ public key */
+  sigverify_spx_key_t spx;
+  /** Hybrid ECDSA & SPHINCS+ public key */
+  hybrid_key_t hybrid;
+  /** Hybrid ECDSA & ML-DSA-87 public key (`tr` prefix) */
+  hybrid_mldsa87_key_t hybrid_mldsa;
+  /** Legacy 96-byte view for `owner_verify()` delegation */
+  owner_keydata_t base;
+  /** Enough space to hold hybrid ECDSA + 48-byte ML-DSA-87 `tr` prefix */
+  uint32_t raw[16 + 12];
+  /** A key ID is the first 32-bit word of the key data */
+  uint32_t id;
+} owner_app_keydata_t;
+OT_ASSERT_SIZE(owner_app_keydata_t, 112);
 
 /**
  * An owner_signature is an ECDSA P256 signature.
@@ -78,6 +108,8 @@ typedef enum ownership_key_alg {
   kOwnershipKeyAlgHybridSpxPure = 0x75502b48,
   /** Key algorithm Hybrid P256 & SPX+ Prehashed SHA256: `H+S2` */
   kOwnershipKeyAlgHybridSpxPrehash = 0x32532b48,
+  /** Key algorithm Hybrid P256 & ML-DSA-87 Pure: `Hym+` (APPK only) */
+  kOwnershipKeyAlgHybridMldsa87 = 0x2b6d7948,
 
   // Tentative identifiers for SPHINCS+ q20 variants (not yet supported):
   // Key algorithm SPX+ Pure: `SqPu`
@@ -270,7 +302,7 @@ typedef struct owner_application_key {
   /** Usage constraint must match manifest header's constraint */
   uint32_t usage_constraint;
   /** Key material.  Varies by algorithm type. */
-  owner_keydata_t data;
+  owner_app_keydata_t data;
 } owner_application_key_t;
 
 OT_ASSERT_MEMBER_OFFSET(owner_application_key_t, header, 0);
@@ -279,7 +311,7 @@ OT_ASSERT_MEMBER_OFFSET(owner_application_key_t, key_domain, 12);
 OT_ASSERT_MEMBER_OFFSET(owner_application_key_t, key_diversifier, 16);
 OT_ASSERT_MEMBER_OFFSET(owner_application_key_t, usage_constraint, 44);
 OT_ASSERT_MEMBER_OFFSET(owner_application_key_t, data, 48);
-OT_ASSERT_SIZE(owner_application_key_t, 144);
+OT_ASSERT_SIZE(owner_application_key_t, 160);
 
 enum {
   kTlvLenApplicationKeySpx =
@@ -288,6 +320,8 @@ enum {
       offsetof(owner_application_key_t, data) + sizeof(ecdsa_p256_public_key_t),
   kTlvLenApplicationKeyHybrid =
       offsetof(owner_application_key_t, data) + sizeof(hybrid_key_t),
+  kTlvLenApplicationKeyHybridMldsa87 =
+      offsetof(owner_application_key_t, data) + sizeof(hybrid_mldsa87_key_t),
 };
 
 /**

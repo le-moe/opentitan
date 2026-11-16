@@ -102,7 +102,11 @@ impl OwnerApplicationKey {
 mod test {
     use super::*;
     use crate::crypto::ecdsa::EcdsaRawPublicKey;
+    use crate::crypto::mldsa::MldsaRawDigest;
+    use crate::ownership::misc::HybridMldsa87RawPublicKey;
     use crate::util::hexdump::{hexdump_parse, hexdump_string};
+    use crate::util::testdata;
+    use std::str::FromStr;
 
     const OWNER_APPLICATION_KEY_BIN: &str = "\
 00000000: 41 50 50 4b 70 00 00 00 50 32 35 36 70 72 6f 64  APPKp...P256prod\n\
@@ -163,6 +167,80 @@ mod test {
         let doc = serde_annotate::serialize(&oak)?.to_json5().to_string();
         eprintln!("{}", doc);
         assert_eq!(doc, OWNER_APPLICATION_KEY_JSON);
+        Ok(())
+    }
+
+    #[test]
+    fn test_owner_application_key_hybrid_mldsa87_roundtrip() -> Result<()> {
+        let oak = OwnerApplicationKey {
+            header: TlvHeader::default(),
+            key_alg: OwnershipKeyAlg::HybridMldsa87,
+            key_domain: ApplicationKeyDomain::Prod,
+            key_diversifier: [1, 2, 3, 4, 5, 6, 7],
+            usage_constraint: 0x11223344,
+            key: KeyMaterial::HybridMldsa87(HybridMldsa87RawPublicKey {
+                ecdsa: EcdsaRawPublicKey {
+                    x: vec![0x11; 32],
+                    y: vec![0x22; 32],
+                },
+                mldsa: MldsaRawDigest {
+                    digest: vec![0xab; 48],
+                },
+            }),
+        };
+        let mut bin = Vec::new();
+        oak.write(&mut bin)?;
+        assert_eq!(bin.len(), 160);
+        assert_eq!(&bin[0..6], b"APPK\xa0\x00");
+        assert_eq!(&bin[8..12], b"Hym+");
+
+        let mut cur = std::io::Cursor::new(&bin);
+        let header = TlvHeader::read(&mut cur)?;
+        let decoded = OwnerApplicationKey::read(&mut cur, header)?;
+        assert_eq!(decoded.key_alg, oak.key_alg);
+        assert_eq!(decoded.key_domain, oak.key_domain);
+        assert_eq!(decoded.key_diversifier, oak.key_diversifier);
+        assert_eq!(decoded.usage_constraint, oak.usage_constraint);
+        assert_eq!(decoded.key, oak.key);
+        Ok(())
+    }
+
+    #[test]
+    fn test_owner_application_key_hybrid_mldsa87_from_str() -> Result<()> {
+        let mldsa_path = testdata("mldsa/mldsa87.pub.pem");
+        let expected_digest = MldsaRawDigest::from_str(mldsa_path.to_str().unwrap())?;
+        let json = format!(
+            r#"{{
+              key_alg: "HybridMldsa87",
+              key_domain: "Prod",
+              key: {{
+                hybrid_mldsa: {{
+                  ecdsa: {{
+                    x: [{}],
+                    y: [{}]
+                  }},
+                  mldsa: "{}"
+                }}
+              }}
+            }}"#,
+            vec!["17"; 32].join(","),
+            vec!["34"; 32].join(","),
+            mldsa_path.to_str().unwrap().replace('\\', "\\\\")
+        );
+        let oak: OwnerApplicationKey = deser_hjson::from_str(&json)?;
+        assert_eq!(
+            oak.key,
+            KeyMaterial::HybridMldsa87(HybridMldsa87RawPublicKey {
+                ecdsa: EcdsaRawPublicKey {
+                    x: vec![17; 32],
+                    y: vec![34; 32],
+                },
+                mldsa: expected_digest,
+            })
+        );
+        let mut bin = Vec::new();
+        oak.write(&mut bin)?;
+        assert_eq!(bin.len(), 160);
         Ok(())
     }
 }

@@ -11,6 +11,7 @@ use std::io::{Read, Write};
 
 use crate::crypto::Error;
 use crate::crypto::ecdsa::EcdsaRawPublicKey;
+use crate::crypto::mldsa::MldsaRawDigest;
 use crate::crypto::rsa::RsaRawPublicKey;
 use crate::crypto::spx::SpxRawPublicKey;
 use crate::util::serde::string_or_struct;
@@ -37,6 +38,7 @@ with_unknown! {
         SpxPrehash = u32::from_le_bytes(*b"S+S2"),
         HybridSpxPure = u32::from_le_bytes(*b"H+Pu"),
         HybridSpxPrehash = u32::from_le_bytes(*b"H+S2"),
+        HybridMldsa87 = u32::from_le_bytes(*b"Hym+"),
     }
     pub enum DetachedSignatureCommand: u32 [default = Self::Unknown] {
         Unknown = 0,
@@ -54,7 +56,7 @@ impl OwnershipKeyAlg {
     pub fn is_ecdsa(self) -> bool {
         matches!(
             self,
-            Self::EcdsaP256 | Self::HybridSpxPure | Self::HybridSpxPrehash
+            Self::EcdsaP256 | Self::HybridSpxPure | Self::HybridSpxPrehash | Self::HybridMldsa87
         )
     }
 
@@ -65,8 +67,15 @@ impl OwnershipKeyAlg {
         )
     }
 
+    pub fn is_mldsa(self) -> bool {
+        matches!(self, Self::HybridMldsa87)
+    }
+
     pub fn is_hybrid(self) -> bool {
-        matches!(self, Self::HybridSpxPure | Self::HybridSpxPrehash)
+        matches!(
+            self,
+            Self::HybridSpxPure | Self::HybridSpxPrehash | Self::HybridMldsa87
+        )
     }
 
     pub fn is_prehashed(self) -> bool {
@@ -193,6 +202,31 @@ impl HybridRawPublicKey {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub struct HybridMldsa87RawPublicKey {
+    #[serde(deserialize_with = "string_or_struct")]
+    pub ecdsa: EcdsaRawPublicKey,
+    #[serde(deserialize_with = "string_or_struct")]
+    pub mldsa: MldsaRawDigest,
+}
+
+impl HybridMldsa87RawPublicKey {
+    pub const SIZE: usize = EcdsaRawPublicKey::SIZE + MldsaRawDigest::SIZE;
+
+    pub fn read(src: &mut impl Read) -> Result<Self> {
+        Ok(Self {
+            ecdsa: EcdsaRawPublicKey::read(src)?,
+            mldsa: MldsaRawDigest::read(src)?,
+        })
+    }
+
+    pub fn write(&self, dest: &mut impl Write) -> Result<()> {
+        self.ecdsa.write(dest)?;
+        self.mldsa.write(dest)?;
+        Ok(())
+    }
+}
+
 /// Low-level key material (ie: bit representation).
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[allow(clippy::len_without_is_empty)]
@@ -207,6 +241,8 @@ pub enum KeyMaterial {
     Spx(#[serde(deserialize_with = "string_or_struct")] SpxRawPublicKey),
     #[serde(alias = "hybrid")]
     Hybrid(HybridRawPublicKey),
+    #[serde(alias = "hybrid_mldsa", alias = "hybrid_mldsa87")]
+    HybridMldsa87(HybridMldsa87RawPublicKey),
 }
 
 impl Default for KeyMaterial {
@@ -222,6 +258,7 @@ impl KeyMaterial {
             KeyMaterial::Rsa(_) => RsaRawPublicKey::SIZE,
             KeyMaterial::Spx(_) => SpxRawPublicKey::SIZE,
             KeyMaterial::Hybrid(_) => HybridRawPublicKey::SIZE,
+            KeyMaterial::HybridMldsa87(_) => HybridMldsa87RawPublicKey::SIZE,
             KeyMaterial::Unknown(u) => u.len(),
         }
     }
@@ -232,6 +269,7 @@ impl KeyMaterial {
             KeyMaterial::Rsa(_) => OwnershipKeyAlg::Rsa,
             KeyMaterial::Spx(_) => OwnershipKeyAlg::SpxPure,
             KeyMaterial::Hybrid(_) => OwnershipKeyAlg::HybridSpxPure,
+            KeyMaterial::HybridMldsa87(_) => OwnershipKeyAlg::HybridMldsa87,
             KeyMaterial::Unknown(_) => OwnershipKeyAlg::Unknown,
         }
     }
@@ -245,6 +283,9 @@ impl KeyMaterial {
             }
             OwnershipKeyAlg::HybridSpxPure | OwnershipKeyAlg::HybridSpxPrehash => {
                 KeyMaterial::Hybrid(HybridRawPublicKey::read(src)?)
+            }
+            OwnershipKeyAlg::HybridMldsa87 => {
+                KeyMaterial::HybridMldsa87(HybridMldsa87RawPublicKey::read(src)?)
             }
             _ => {
                 return Err(
@@ -279,6 +320,7 @@ impl KeyMaterial {
             KeyMaterial::Rsa(k) => k.write(dest)?,
             KeyMaterial::Spx(k) => k.write(dest)?,
             KeyMaterial::Hybrid(k) => k.write(dest)?,
+            KeyMaterial::HybridMldsa87(k) => k.write(dest)?,
             _ => {
                 return Err(Error::InvalidPublicKey(anyhow!("Unknown key type")).into());
             }

@@ -9,6 +9,7 @@
 #include "sw/device/silicon_creator/lib/error.h"
 #include "sw/device/silicon_creator/lib/ownership/datatypes.h"
 #include "sw/device/silicon_creator/lib/sigverify/ecdsa_p256_key.h"
+#include "sw/device/silicon_creator/lib/sigverify/mldsa87_key.h"
 #include "sw/device/silicon_creator/lib/sigverify/spx_key.h"
 
 /**
@@ -35,5 +36,43 @@ rom_error_t owner_verify(uint32_t key_alg, const owner_keydata_t *key,
                          const void *msg_prefix_2, size_t msg_prefix_2_len,
                          const void *msg, size_t msg_len,
                          const hmac_digest_t *digest, uint32_t *flash_exec);
+
+/**
+ * Verify data using an owner application key (`owner_application_key_t`).
+ *
+ * Dispatches strictly from the trusted `app_key->key_alg` in the keyring.
+ * For `kOwnershipKeyAlgHybridMldsa87`, requires non-NULL `mldsa_pk` and
+ * `mldsa_sig`, computes `tr = SHAKE256(mldsa_pk, 64)` once, validates
+ * `tr[0..11]` against `app_key->data.hybrid_mldsa.mldsa`, computes `mu`, and
+ * verifies both ECDSA-P256 and ML-DSA-87 in randomized order. Legacy
+ * algorithms delegate to `owner_verify()`.
+ *
+ * @param app_key Trusted application key entry from the owner keyring.
+ * @param ecdsa_sig ECDSA signature to verify (if relevant to
+ * `app_key->key_alg`).
+ * @param spx_sig SPHINCS+ signature to verify (if relevant to
+ * `app_key->key_alg`).
+ * @param mldsa_pk ML-DSA-87 public key from manifest extension (if `Hym+`).
+ * @param mldsa_sig ML-DSA-87 signature from manifest extension (if `Hym+`).
+ * @param msg_prefix_1 Optional message prefix 1 for SPX+ / ML-DSA `mu`.
+ * @param msg_prefix_1_len Length of prefix 1 in bytes.
+ * @param msg_prefix_2 Optional message prefix 2 for SPX+ / ML-DSA `mu`.
+ * @param msg_prefix_2_len Length of prefix 2 in bytes.
+ * @param msg Start of the message.
+ * @param msg_len Length of the message.
+ * @param digest Precomputed SHA-256 digest of the message.
+ * @param[out] flash_exec Flash execution token on success.
+ * @return `kErrorOk` if verification succeeds, else an error code.
+ */
+OT_WARN_UNUSED_RESULT
+rom_error_t owner_verify_app(const owner_application_key_t *app_key,
+                             const ecdsa_p256_signature_t *ecdsa_sig,
+                             const sigverify_spx_signature_t *spx_sig,
+                             const sigverify_mldsa87_key_t *mldsa_pk,
+                             const sigverify_mldsa87_signature_t *mldsa_sig,
+                             const void *msg_prefix_1, size_t msg_prefix_1_len,
+                             const void *msg_prefix_2, size_t msg_prefix_2_len,
+                             const void *msg, size_t msg_len,
+                             const hmac_digest_t *digest, uint32_t *flash_exec);
 
 #endif  // OPENTITAN_SW_DEVICE_SILICON_CREATOR_LIB_OWNERSHIP_OWNER_VERIFY_H_

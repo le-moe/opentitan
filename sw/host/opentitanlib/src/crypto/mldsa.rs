@@ -2,7 +2,9 @@
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 
+use std::io::{Read, Write};
 use std::path::Path;
+use std::str::FromStr;
 
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use ml_dsa::common::getrandom::SysRng;
@@ -15,8 +17,14 @@ use ml_dsa::pkcs8::{
     DecodePublicKey, EncodePrivateKey, EncodePublicKey, LineEnding, ObjectIdentifier,
     PrivateKeyInfoRef, SecretDocument, SubjectPublicKeyInfoRef,
 };
-use ml_dsa::{Keypair, MlDsaParams, Seed, Signature, SigningKey, VerifyingKey};
+use ml_dsa::{Keypair, MlDsa87, MlDsaParams, Seed, Signature, SigningKey, VerifyingKey};
+use serde::Deserialize;
+use serde_annotate::Annotate;
+use sha3::Shake256;
+use sha3::digest::{ExtendableOutput, Update, XofReader};
 use strum::{Display, EnumString};
+
+use super::Error;
 
 /// ML-DSA parameter sets with PKCS#8 / SubjectPublicKeyInfo support.
 pub trait MldsaPkcs8Params:
@@ -266,6 +274,79 @@ pub fn mldsa_verify<P: MlDsaParams>(
     Ok(())
 }
 
+/// First 48 bytes of `tr = SHAKE256(pk, 64)` for an ML-DSA-87 public key,
+/// matching `sigverify_mldsa87_key_digest_t` on device.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Annotate)]
+pub struct MldsaRawDigest {
+    #[serde(with = "serde_bytes")]
+    #[annotate(format = hexstr)]
+    pub digest: Vec<u8>,
+}
+
+impl Default for MldsaRawDigest {
+    fn default() -> Self {
+        Self {
+            digest: vec![0; Self::SIZE],
+        }
+    }
+}
+
+impl TryFrom<&VerifyingKey<MlDsa87>> for MldsaRawDigest {
+    type Error = Error;
+
+    fn try_from(key: &VerifyingKey<MlDsa87>) -> std::result::Result<Self, Self::Error> {
+        let encoded = key.encode();
+        let mut hasher = Shake256::default();
+        hasher.update(encoded.as_slice());
+        let mut xof = hasher.finalize_xof();
+        let mut tr = [0u8; 64];
+        XofReader::read(&mut xof, &mut tr);
+        Ok(Self {
+            digest: tr[..Self::SIZE].to_vec(),
+        })
+    }
+}
+
+impl TryFrom<VerifyingKey<MlDsa87>> for MldsaRawDigest {
+    type Error = Error;
+
+    fn try_from(key: VerifyingKey<MlDsa87>) -> std::result::Result<Self, Self::Error> {
+        Self::try_from(&key)
+    }
+}
+
+impl FromStr for MldsaRawDigest {
+    type Err = Error;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        let (vk, _) = load_mldsa_key::<MlDsa87>(Path::new(s)).map_err(Error::InvalidPublicKey)?;
+        Self::try_from(&vk)
+    }
+}
+
+impl MldsaRawDigest {
+    pub const SIZE: usize = 48;
+
+    pub fn read(src: &mut impl Read) -> Result<Self> {
+        let mut digest = vec![0u8; Self::SIZE];
+        src.read_exact(&mut digest)?;
+        Ok(Self { digest })
+    }
+
+    pub fn write(&self, dest: &mut impl Write) -> Result<()> {
+        ensure!(
+            self.digest.len() == Self::SIZE,
+            Error::InvalidPublicKey(anyhow!(
+                "Invalid ML-DSA-87 key digest length: {} (expected {})",
+                self.digest.len(),
+                Self::SIZE
+            ))
+        );
+        dest.write_all(&self.digest)?;
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -381,6 +462,31 @@ mod test {
         );
         let err = mldsa_private_key_from_bytes::<MlDsa87>(&priv_only).unwrap_err();
         assert!(err.to_string().contains("Expanded-only"));
+        Ok(())
+    }
+
+    #[test]
+    fn raw_digest() -> Result<()> {
+        let pk_path = testdata("mldsa/mldsa87.pub.pem");
+        let sk_path = testdata("mldsa/openssl_mldsa87.seed-only.pem");
+        let openssl_pk_path = testdata("mldsa/openssl_mldsa87.pub.pem");
+
+        let from_pk = MldsaRawDigest::from_str(pk_path.to_str().unwrap())?;
+        assert_eq!(from_pk.digest.len(), MldsaRawDigest::SIZE);
+        let pk = mldsa_public_key_from_bytes::<MlDsa87>(&std::fs::read(&pk_path)?)?;
+        assert_eq!(from_pk, MldsaRawDigest::try_from(&pk)?);
+
+        // Private and public key files yield the same tr digest.
+        let from_sk = MldsaRawDigest::from_str(sk_path.to_str().unwrap())?;
+        let from_ossl_pk = MldsaRawDigest::from_str(openssl_pk_path.to_str().unwrap())?;
+        assert_eq!(from_sk, from_ossl_pk);
+
+        // Binary write/read roundtrip.
+        let mut buf = Vec::new();
+        from_pk.write(&mut buf)?;
+        assert_eq!(buf.len(), MldsaRawDigest::SIZE);
+        let decoded = MldsaRawDigest::read(&mut std::io::Cursor::new(&buf))?;
+        assert_eq!(decoded, from_pk);
         Ok(())
     }
 }

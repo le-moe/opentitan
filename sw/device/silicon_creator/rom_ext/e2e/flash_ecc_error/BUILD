@@ -133,6 +133,7 @@ opentitan_binary(
         local_defines = [
             "CAUSE_ID={}".format(c["id"]),
         ],
+        ecdsa_key = {"//sw/device/silicon_creator/lib/ownership/keys/fake:ecdsa_keyset": "app_prod_spx_0"},
         spx_key = {"//sw/device/silicon_creator/lib/ownership/keys/fake:spx_keyset": "app_prod_0"},
         target_compatible_with = opentitan_require_top("earlgrey"),
         deps = [

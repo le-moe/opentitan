@@ -87,8 +87,8 @@ rom_error_t rom_ext_verify(const manifest_t *manifest, char slot_id,
   memcpy(&boot_measurements.bl0, &act_digest, sizeof(boot_measurements.bl0));
 
   RETURN_IF_ERROR(owner_verify(
-      key_alg, &keyring->key[*verify_key]->data, &manifest->ecdsa_signature,
-      spx_signature, &usage_constraints_from_hw,
+      key_alg, &keyring->key[*verify_key]->data.base,
+      &manifest->ecdsa_signature, spx_signature, &usage_constraints_from_hw,
       sizeof(usage_constraints_from_hw), NULL, 0, digest_region.start,
       digest_region.length, &act_digest, flash_exec));
 

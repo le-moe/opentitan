@@ -50,6 +50,10 @@ static rom_error_t do_unlock(boot_svc_msg_t *msg, boot_data_t *bootdata,
   HARDENED_CHECK_EQ(*flash_exec, kSigverifyFlashExec);
 
   if (msg->ownership_unlock_req.unlock_mode == kBootSvcUnlockEndorsed) {
+    if (msg->ownership_unlock_req.next_owner_key_alg ==
+        kOwnershipKeyAlgHybridMldsa87) {
+      return kErrorOwnershipInvalidAlgorithm;
+    }
     hmac_digest_t digest;
     hmac_sha256_init();
     hmac_sha256_update(&msg->ownership_unlock_req.next_owner_key_alg,
