@@ -674,12 +674,26 @@ inline rom_error_t manifest_check(const manifest_t *manifest) {
   }
 
   // Manifest extension offset must be word aligned and within the image.
+  // Signed extensions must lie wholly inside `signed_region_end`.
   for (size_t i = 0; i < CHIP_MANIFEST_EXT_TABLE_ENTRY_COUNT; ++i) {
     uint32_t offset = manifest->extensions.entries[i].offset;
     if (offset != 0) {
       if ((offset & 0x3) != 0 || offset < sizeof(manifest_t) ||
           manifest->length < sizeof(manifest_ext_header_t) ||
           offset > manifest->length - sizeof(manifest_ext_header_t)) {
+        return kErrorManifestBadExtension;
+      }
+      uint32_t min_size = sizeof(manifest_ext_header_t);
+      bool is_signed = false;
+#define CHECK_SIGNED_EXT_(index_, type_, name_, id_, signed_) \
+  if (i == (index_) && (signed_)) {                           \
+    is_signed = true;                                         \
+    min_size = sizeof(type_);                                 \
+  }
+      MANIFEST_EXTENSIONS(CHECK_SIGNED_EXT_)
+#undef CHECK_SIGNED_EXT_
+      if (is_signed && (manifest->signed_region_end < min_size ||
+                        offset > manifest->signed_region_end - min_size)) {
         return kErrorManifestBadExtension;
       }
     }

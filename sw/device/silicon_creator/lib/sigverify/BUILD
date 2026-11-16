@@ -3,6 +3,11 @@
 # SPDX-License-Identifier: Apache-2.0
 
 load(
+    "@bazel_skylib//lib:dicts.bzl",
+    "dicts",
+)
+load("//hw/top:defs.bzl", "opentitan_require_ip")
+load(
     "//rules:cross_platform.bzl",
     "dual_cc_device_library_of",
     "dual_cc_library",
@@ -11,16 +16,12 @@ load(
 load(
     "//rules/opentitan:defs.bzl",
     "EARLGREY_TEST_ENVS",
+    "OPENTITAN_CPU",
     "fpga_params",
     "opentitan_test",
     "qemu_params",
     "verilator_params",
 )
-load(
-    "@bazel_skylib//lib:dicts.bzl",
-    "dicts",
-)
-load("//hw/top:defs.bzl", "opentitan_require_ip")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -329,5 +330,84 @@ opentitan_test(
         "//sw/device/lib/testing/test_framework:ottf_main",
         "//sw/device/silicon_creator/lib/base:sec_mmio",
         "//sw/device/silicon_creator/lib/sigverify/sigverify_tests:sigverify_testvectors_wycheproof",
+    ],
+)
+
+dual_cc_library(
+    name = "mldsa_verify_otbn_app",
+    srcs = dual_inputs(
+        device = ["mldsa_verify_otbn_app.c"],
+        host = ["mock_mldsa_verify_otbn_app.cc"],
+    ),
+    hdrs = dual_inputs(
+        host = ["mock_mldsa_verify_otbn_app.h"],
+        shared = ["mldsa_verify_otbn_app.h"],
+    ),
+    target_compatible_with = dual_inputs(device = [OPENTITAN_CPU]),
+    deps = dual_inputs(
+        device = [
+            "//sw/device/silicon_creator/lib:otbn_boot_services",
+            "//sw/otbn/crypto/mldsa87:run_mldsa87",
+        ],
+        host = [
+            "//sw/device/lib/base:global_mock",
+            "//sw/device/silicon_creator/testing:rom_test",
+            "@googletest//:gtest",
+        ],
+        shared = [
+            "//sw/device/lib/base:macros",
+            "//sw/device/silicon_creator/lib:error",
+            "//sw/device/silicon_creator/lib/drivers:otbn",
+        ],
+    ),
+)
+
+cc_library(
+    name = "mldsa_verify",
+    srcs = ["mldsa_verify.c"],
+    hdrs = ["mldsa_verify.h"],
+    deps = [
+        ":mldsa87_key",
+        ":mldsa_verify_otbn_app",
+        "//sw/device/lib/base:hardened",
+        "//sw/device/lib/base:macros",
+        "//sw/device/silicon_creator/lib:error",
+        "//sw/device/silicon_creator/lib/base:sec_mmio",
+        "//sw/device/silicon_creator/lib/drivers:kmac",
+        "//sw/device/silicon_creator/lib/drivers:otbn",
+    ],
+)
+
+cc_test(
+    name = "mldsa_verify_unittest",
+    srcs = ["mldsa_verify_unittest.cc"],
+    deps = [
+        ":mldsa_verify",
+        "//hw/top:kmac_c_regs",
+        "//hw/top:otbn_c_regs",
+        "//hw/top/dt",
+        "//sw/device/silicon_creator/testing:rom_test",
+        "@googletest//:gtest_main",
+    ],
+)
+
+opentitan_test(
+    name = "mldsa_verify_functest",
+    srcs = ["mldsa_verify_functest.c"],
+    exec_env = dicts.add(
+        EARLGREY_TEST_ENVS,
+        {
+            "//hw/top_earlgrey:fpga_cw340_test_rom": None,
+        },
+    ),
+    deps = [
+        ":ecdsa_p256_verify",
+        ":flash_exec",
+        ":mldsa_verify",
+        "//sw/device/lib/base:hardened",
+        "//sw/device/lib/testing/test_framework:check",
+        "//sw/device/lib/testing/test_framework:ottf_main",
+        "//sw/device/silicon_creator/lib:otbn_boot_services",
+        "//sw/device/silicon_creator/lib/base:sec_mmio",
     ],
 )

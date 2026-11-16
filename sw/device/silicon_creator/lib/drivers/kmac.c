@@ -362,6 +362,24 @@ rom_error_t kmac_shake256_squeeze_end(uint32_t *out, size_t outlen) {
   return kErrorOk;
 }
 
+void kmac_shake256_abort_if_absorbing(void) {
+  uint32_t intr_state =
+      abs_mmio_read32(kmac_base() + KMAC_INTR_STATE_REG_OFFSET);
+  if (bitfield_bit32_read(intr_state, KMAC_INTR_STATE_KMAC_ERR_BIT)) {
+    return;
+  }
+  uint32_t status = abs_mmio_read32(kmac_base() + KMAC_STATUS_REG_OFFSET);
+  if (!bitfield_bit32_read(status, KMAC_STATUS_SHA3_ABSORB_BIT)) {
+    return;
+  }
+  issue_command(KMAC_CMD_CMD_VALUE_PROCESS);
+  if (poll_state(KMAC_STATUS_SHA3_SQUEEZE_BIT) != kErrorOk) {
+    return;
+  }
+  issue_command(KMAC_CMD_CMD_VALUE_DONE);
+  OT_DISCARD(poll_state(KMAC_STATUS_SHA3_IDLE_BIT));
+}
+
 #define WORD_BITS (sizeof(uint32_t) * 8)
 #define KEY_CASE(x_)                       \
   case x_ / WORD_BITS:                     \

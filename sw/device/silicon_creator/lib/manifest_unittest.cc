@@ -110,6 +110,30 @@ TEST_F(ManifestTest, ExtensionOffsetTooCloseToImageEnd) {
   EXPECT_EQ(manifest_check(&manifest_), kErrorManifestBadExtension);
 }
 
+TEST_F(ManifestTest, SignedExtensionPastSignedRegionEnd) {
+  manifest_.length = sizeof(manifest_t) + 0x2000;
+  manifest_.signed_region_end = sizeof(manifest_t) + 0x1000;
+
+  // Entry 6 (`mldsa87_key`) is signed and must fit within `signed_region_end`.
+  manifest_.extensions.entries[6].offset = manifest_.signed_region_end;
+  EXPECT_EQ(manifest_check(&manifest_), kErrorManifestBadExtension);
+
+  manifest_.extensions.entries[6].offset =
+      manifest_.signed_region_end - sizeof(manifest_ext_mldsa87_key_t) + 4;
+  EXPECT_EQ(manifest_check(&manifest_), kErrorManifestBadExtension);
+
+  manifest_.extensions.entries[6].offset =
+      manifest_.signed_region_end - sizeof(manifest_ext_mldsa87_key_t);
+  EXPECT_EQ(manifest_check(&manifest_), kErrorOk);
+}
+
+TEST_F(ManifestTest, UnsignedExtensionAllowedPastSignedRegionEnd) {
+  // Entry 7 (`mldsa87_signature`) is unsigned and may sit after
+  // `signed_region_end` as long as its header is within `length`.
+  manifest_.extensions.entries[7].offset = manifest_.signed_region_end;
+  EXPECT_EQ(manifest_check(&manifest_), kErrorOk);
+}
+
 TEST_F(ManifestTest, EntryPointBeforeCodeStart) {
   manifest_.entry_point = manifest_.code_start - 1;
   EXPECT_EQ(manifest_check(&manifest_), kErrorManifestBadEntryPoint);

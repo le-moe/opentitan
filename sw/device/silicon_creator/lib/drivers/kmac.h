@@ -157,6 +157,12 @@ OT_WARN_UNUSED_RESULT
 rom_error_t kmac_shake256_squeeze_end(uint32_t *out, size_t outlen);
 
 /**
+ * Recovers the KMAC block back to Idle if it is stuck in `SHA3_ABSORB`
+ * without `KMAC_ERR` set (e.g., on an aborted streaming operation).
+ */
+void kmac_shake256_abort_if_absorbing(void);
+
+/**
  * Load an unmasked software key into KMAC.
  *
  * @param key The key material.
