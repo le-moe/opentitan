@@ -16,7 +16,7 @@
 {
     otp: {
         width: "2", // bytes
-        depth: "1072"
+        depth: "1104"
     }
 
     // Definition of scrambling and digest constants and keys.
@@ -896,11 +896,7 @@
                         },
                         {
                             name: "ROT_CREATOR_AUTH_CODESIGN_SPX_KEY0",
-                            size: "32"
-                        },
-                        {
-                            name: "ROT_CREATOR_AUTH_CODESIGN_SPX_KEY_CONFIG0",
-                            size: "4"
+                            size: "48"
                         },
                         {
                             name: "ROT_CREATOR_AUTH_CODESIGN_SPX_KEY_TYPE1",
@@ -908,11 +904,7 @@
                         },
                         {
                             name: "ROT_CREATOR_AUTH_CODESIGN_SPX_KEY1",
-                            size: "32"
-                        },
-                        {
-                            name: "ROT_CREATOR_AUTH_CODESIGN_SPX_KEY_CONFIG1",
-                            size: "4"
+                            size: "48"
                         },
                         {
                             name: "ROT_CREATOR_AUTH_CODESIGN_SPX_KEY_TYPE2",
@@ -920,11 +912,7 @@
                         },
                         {
                             name: "ROT_CREATOR_AUTH_CODESIGN_SPX_KEY2",
-                            size: "32"
-                        },
-                        {
-                            name: "ROT_CREATOR_AUTH_CODESIGN_SPX_KEY_CONFIG2",
-                            size: "4"
+                            size: "48"
                         },
                         {
                             name: "ROT_CREATOR_AUTH_CODESIGN_SPX_KEY_TYPE3",
@@ -932,23 +920,19 @@
                         },
                         {
                             name: "ROT_CREATOR_AUTH_CODESIGN_SPX_KEY3",
-                            size: "32"
+                            size: "48"
                         },
                         {
-                            name: "ROT_CREATOR_AUTH_CODESIGN_SPX_KEY_CONFIG3",
-                            size: "4"
-                        },
-                        {
-                            name: "ROT_CREATOR_AUTH_CODESIGN_BLOCK_SHA2_256_HASH",
-                            size: "32"
+                            name: "ROT_CREATOR_AUTH_CODESIGN_BLOCK_SHA2_384_HASH",
+                            size: "48"
                         }
                    ]
                    desc: '''
                          This OTP partition is used to store four P-256 keys
-                         and four Sphincs+ keys. The partition requires 464
-                         bytes of software visible storage. The partition is
-                         locked at manufacturing time to protect against
-                         malicious write attempts.
+                         and four post-quantum (SPHINCS+ or ML-DSA) keys. The
+                         partition requires 528 bytes of software visible
+                         storage. The partition is locked at manufacturing time
+                         to protect against malicious write attempts.
                          '''
         }
         {

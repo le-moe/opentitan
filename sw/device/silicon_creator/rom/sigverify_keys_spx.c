@@ -25,15 +25,17 @@ rom_error_t sigverify_spx_key_get(const sigverify_otp_key_ctx_t *sigverify_ctx,
             .key_id = key_id,
             .lc_state = lc_state,
             .key_array =
-                (const sigverify_rom_key_header_t *)(sigverify_ctx->keys.spx),
-            .key_cnt = kSigVerifyOtpKeysSpxCount,
-            .key_size = sizeof(sigverify_rom_spx_key_t),
-            .key_states = (uint32_t *)&sigverify_ctx->states.spx[0],
+                (const sigverify_rom_key_header_t *)(sigverify_ctx->keys.pq),
+            .key_cnt = kSigVerifyOtpKeysPqCount,
+            .key_size = sizeof(sigverify_rom_pq_key_t),
+            .key_states = (uint32_t *)&sigverify_ctx->states.pq[0],
         },
         &rom_key);
     if (error == kErrorOk) {
-      *key = &((const sigverify_rom_spx_key_t *)rom_key)->entry.key;
-      *config = ((const sigverify_rom_spx_key_t *)rom_key)->entry.config_id;
+      const sigverify_rom_pq_key_t *pq_key =
+          (const sigverify_rom_pq_key_t *)rom_key;
+      *key = &pq_key->spx.entry.key;
+      *config = pq_key->spx.entry.config_id;
     }
   } else {
     HARDENED_CHECK_EQ(spx_en, kSigverifySpxDisabledOtp);

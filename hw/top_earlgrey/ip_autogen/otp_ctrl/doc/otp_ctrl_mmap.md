@@ -71,7 +71,7 @@ It has been generated with ./util/topgen.py -t hw/top_earlgrey/data/top_earlgrey
 |         |                           |            |              |      32bit       |                   OWNER_SW_CFG_ROM_NVM_ECC_EXC_HANDLER_EN                   |     0x400      |     4      |
 |         |                           |            |              |      32bit       |                            OWNER_SW_CFG_RESERVED                            |     0x404      |     96     |
 |         |                           |            |              |      64bit       |              [OWNER_SW_CFG_DIGEST](#Reg_owner_sw_cfg_digest_0)              |     0x468      |     8      |
-|    3    | ROT_CREATOR_AUTH_CODESIGN |    472     |      no      |      32bit       |                  ROT_CREATOR_AUTH_CODESIGN_ECDSA_KEY_TYPE0                  |     0x470      |     4      |
+|    3    | ROT_CREATOR_AUTH_CODESIGN |    536     |      no      |      32bit       |                  ROT_CREATOR_AUTH_CODESIGN_ECDSA_KEY_TYPE0                  |     0x470      |     4      |
 |         |                           |            |              |      32bit       |                    ROT_CREATOR_AUTH_CODESIGN_ECDSA_KEY0                     |     0x474      |     64     |
 |         |                           |            |              |      32bit       |                  ROT_CREATOR_AUTH_CODESIGN_ECDSA_KEY_TYPE1                  |     0x4B4      |     4      |
 |         |                           |            |              |      32bit       |                    ROT_CREATOR_AUTH_CODESIGN_ECDSA_KEY1                     |     0x4B8      |     64     |
@@ -80,50 +80,46 @@ It has been generated with ./util/topgen.py -t hw/top_earlgrey/data/top_earlgrey
 |         |                           |            |              |      32bit       |                  ROT_CREATOR_AUTH_CODESIGN_ECDSA_KEY_TYPE3                  |     0x53C      |     4      |
 |         |                           |            |              |      32bit       |                    ROT_CREATOR_AUTH_CODESIGN_ECDSA_KEY3                     |     0x540      |     64     |
 |         |                           |            |              |      32bit       |                   ROT_CREATOR_AUTH_CODESIGN_SPX_KEY_TYPE0                   |     0x580      |     4      |
-|         |                           |            |              |      32bit       |                     ROT_CREATOR_AUTH_CODESIGN_SPX_KEY0                      |     0x584      |     32     |
-|         |                           |            |              |      32bit       |                  ROT_CREATOR_AUTH_CODESIGN_SPX_KEY_CONFIG0                  |     0x5A4      |     4      |
-|         |                           |            |              |      32bit       |                   ROT_CREATOR_AUTH_CODESIGN_SPX_KEY_TYPE1                   |     0x5A8      |     4      |
-|         |                           |            |              |      32bit       |                     ROT_CREATOR_AUTH_CODESIGN_SPX_KEY1                      |     0x5AC      |     32     |
-|         |                           |            |              |      32bit       |                  ROT_CREATOR_AUTH_CODESIGN_SPX_KEY_CONFIG1                  |     0x5CC      |     4      |
-|         |                           |            |              |      32bit       |                   ROT_CREATOR_AUTH_CODESIGN_SPX_KEY_TYPE2                   |     0x5D0      |     4      |
-|         |                           |            |              |      32bit       |                     ROT_CREATOR_AUTH_CODESIGN_SPX_KEY2                      |     0x5D4      |     32     |
-|         |                           |            |              |      32bit       |                  ROT_CREATOR_AUTH_CODESIGN_SPX_KEY_CONFIG2                  |     0x5F4      |     4      |
-|         |                           |            |              |      32bit       |                   ROT_CREATOR_AUTH_CODESIGN_SPX_KEY_TYPE3                   |     0x5F8      |     4      |
-|         |                           |            |              |      32bit       |                     ROT_CREATOR_AUTH_CODESIGN_SPX_KEY3                      |     0x5FC      |     32     |
-|         |                           |            |              |      32bit       |                  ROT_CREATOR_AUTH_CODESIGN_SPX_KEY_CONFIG3                  |     0x61C      |     4      |
-|         |                           |            |              |      32bit       |                ROT_CREATOR_AUTH_CODESIGN_BLOCK_SHA2_256_HASH                |     0x620      |     32     |
-|         |                           |            |              |      64bit       | [ROT_CREATOR_AUTH_CODESIGN_DIGEST](#Reg_rot_creator_auth_codesign_digest_0) |     0x640      |     8      |
-|    4    |  ROT_CREATOR_AUTH_STATE   |     40     |      no      |      32bit       |                      ROT_CREATOR_AUTH_STATE_ECDSA_KEY0                      |     0x648      |     4      |
-|         |                           |            |              |      32bit       |                      ROT_CREATOR_AUTH_STATE_ECDSA_KEY1                      |     0x64C      |     4      |
-|         |                           |            |              |      32bit       |                      ROT_CREATOR_AUTH_STATE_ECDSA_KEY2                      |     0x650      |     4      |
-|         |                           |            |              |      32bit       |                      ROT_CREATOR_AUTH_STATE_ECDSA_KEY3                      |     0x654      |     4      |
-|         |                           |            |              |      32bit       |                       ROT_CREATOR_AUTH_STATE_SPX_KEY0                       |     0x658      |     4      |
-|         |                           |            |              |      32bit       |                       ROT_CREATOR_AUTH_STATE_SPX_KEY1                       |     0x65C      |     4      |
-|         |                           |            |              |      32bit       |                       ROT_CREATOR_AUTH_STATE_SPX_KEY2                       |     0x660      |     4      |
-|         |                           |            |              |      32bit       |                       ROT_CREATOR_AUTH_STATE_SPX_KEY3                       |     0x664      |     4      |
-|         |                           |            |              |      64bit       |    [ROT_CREATOR_AUTH_STATE_DIGEST](#Reg_rot_creator_auth_state_digest_0)    |     0x668      |     8      |
-|    5    |          HW_CFG0          |     72     |      no      |      32bit       |                                  DEVICE_ID                                  |     0x670      |     32     |
-|         |                           |            |              |      32bit       |                                 MANUF_STATE                                 |     0x690      |     32     |
-|         |                           |            |              |      64bit       |                   [HW_CFG0_DIGEST](#Reg_hw_cfg0_digest_0)                   |     0x6B0      |     8      |
-|    6    |          HW_CFG1          |     16     |      no      |      32bit       |                               EN_SRAM_IFETCH                                |     0x6B8      |     1      |
-|         |                           |            |              |      32bit       |                            DIS_RV_DM_LATE_DEBUG                             |     0x6B9      |     1      |
-|         |                           |            |              |      64bit       |                   [HW_CFG1_DIGEST](#Reg_hw_cfg1_digest_0)                   |     0x6C0      |     8      |
-|    7    |          SECRET0          |     48     |     yes      |      64bit       |                              TEST_UNLOCK_TOKEN                              |     0x6C8      |     16     |
-|         |                           |            |              |      64bit       |                               TEST_EXIT_TOKEN                               |     0x6D8      |     16     |
-|         |                           |            |              |      64bit       |                   [SECRET0_DIGEST](#Reg_secret0_digest_0)                   |     0x6E8      |     8      |
-|         |                           |            |              |      64bit       |                                 SECRET0_ZER                                 |     0x6F0      |     8      |
-|    8    |          SECRET1          |     96     |     yes      |      64bit       |                              NVM_ADDR_KEY_SEED                              |     0x6F8      |     32     |
-|         |                           |            |              |      64bit       |                              NVM_DATA_KEY_SEED                              |     0x718      |     32     |
-|         |                           |            |              |      64bit       |                             SRAM_DATA_KEY_SEED                              |     0x738      |     16     |
-|         |                           |            |              |      64bit       |                   [SECRET1_DIGEST](#Reg_secret1_digest_0)                   |     0x748      |     8      |
-|         |                           |            |              |      64bit       |                                 SECRET1_ZER                                 |     0x750      |     8      |
-|    9    |          SECRET2          |    128     |     yes      |      64bit       |                                  RMA_TOKEN                                  |     0x758      |     16     |
-|         |                           |            |              |      64bit       |                           CREATOR_ROOT_KEY_SHARE0                           |     0x768      |     48     |
-|         |                           |            |              |      64bit       |                           CREATOR_ROOT_KEY_SHARE1                           |     0x798      |     48     |
-|         |                           |            |              |      64bit       |                   [SECRET2_DIGEST](#Reg_secret2_digest_0)                   |     0x7C8      |     8      |
-|         |                           |            |              |      64bit       |                                 SECRET2_ZER                                 |     0x7D0      |     8      |
-|   10    |          SECRET3          |     48     |     yes      |      64bit       |                                FIELD_ENTROPY                                |     0x7D8      |     32     |
-|         |                           |            |              |      64bit       |                   [SECRET3_DIGEST](#Reg_secret3_digest_0)                   |     0x7F8      |     8      |
-|         |                           |            |              |      64bit       |                                 SECRET3_ZER                                 |     0x800      |     8      |
-|   11    |        LIFE_CYCLE         |     88     |      no      |      32bit       |                              LC_TRANSITION_CNT                              |     0x808      |     48     |
-|         |                           |            |              |      32bit       |                                  LC_STATE                                   |     0x838      |     40     |
+|         |                           |            |              |      32bit       |                     ROT_CREATOR_AUTH_CODESIGN_SPX_KEY0                      |     0x584      |     48     |
+|         |                           |            |              |      32bit       |                   ROT_CREATOR_AUTH_CODESIGN_SPX_KEY_TYPE1                   |     0x5B4      |     4      |
+|         |                           |            |              |      32bit       |                     ROT_CREATOR_AUTH_CODESIGN_SPX_KEY1                      |     0x5B8      |     48     |
+|         |                           |            |              |      32bit       |                   ROT_CREATOR_AUTH_CODESIGN_SPX_KEY_TYPE2                   |     0x5E8      |     4      |
+|         |                           |            |              |      32bit       |                     ROT_CREATOR_AUTH_CODESIGN_SPX_KEY2                      |     0x5EC      |     48     |
+|         |                           |            |              |      32bit       |                   ROT_CREATOR_AUTH_CODESIGN_SPX_KEY_TYPE3                   |     0x61C      |     4      |
+|         |                           |            |              |      32bit       |                     ROT_CREATOR_AUTH_CODESIGN_SPX_KEY3                      |     0x620      |     48     |
+|         |                           |            |              |      32bit       |                ROT_CREATOR_AUTH_CODESIGN_BLOCK_SHA2_384_HASH                |     0x650      |     48     |
+|         |                           |            |              |      64bit       | [ROT_CREATOR_AUTH_CODESIGN_DIGEST](#Reg_rot_creator_auth_codesign_digest_0) |     0x680      |     8      |
+|    4    |  ROT_CREATOR_AUTH_STATE   |     40     |      no      |      32bit       |                      ROT_CREATOR_AUTH_STATE_ECDSA_KEY0                      |     0x688      |     4      |
+|         |                           |            |              |      32bit       |                      ROT_CREATOR_AUTH_STATE_ECDSA_KEY1                      |     0x68C      |     4      |
+|         |                           |            |              |      32bit       |                      ROT_CREATOR_AUTH_STATE_ECDSA_KEY2                      |     0x690      |     4      |
+|         |                           |            |              |      32bit       |                      ROT_CREATOR_AUTH_STATE_ECDSA_KEY3                      |     0x694      |     4      |
+|         |                           |            |              |      32bit       |                       ROT_CREATOR_AUTH_STATE_SPX_KEY0                       |     0x698      |     4      |
+|         |                           |            |              |      32bit       |                       ROT_CREATOR_AUTH_STATE_SPX_KEY1                       |     0x69C      |     4      |
+|         |                           |            |              |      32bit       |                       ROT_CREATOR_AUTH_STATE_SPX_KEY2                       |     0x6A0      |     4      |
+|         |                           |            |              |      32bit       |                       ROT_CREATOR_AUTH_STATE_SPX_KEY3                       |     0x6A4      |     4      |
+|         |                           |            |              |      64bit       |    [ROT_CREATOR_AUTH_STATE_DIGEST](#Reg_rot_creator_auth_state_digest_0)    |     0x6A8      |     8      |
+|    5    |          HW_CFG0          |     72     |      no      |      32bit       |                                  DEVICE_ID                                  |     0x6B0      |     32     |
+|         |                           |            |              |      32bit       |                                 MANUF_STATE                                 |     0x6D0      |     32     |
+|         |                           |            |              |      64bit       |                   [HW_CFG0_DIGEST](#Reg_hw_cfg0_digest_0)                   |     0x6F0      |     8      |
+|    6    |          HW_CFG1          |     16     |      no      |      32bit       |                               EN_SRAM_IFETCH                                |     0x6F8      |     1      |
+|         |                           |            |              |      32bit       |                            DIS_RV_DM_LATE_DEBUG                             |     0x6F9      |     1      |
+|         |                           |            |              |      64bit       |                   [HW_CFG1_DIGEST](#Reg_hw_cfg1_digest_0)                   |     0x700      |     8      |
+|    7    |          SECRET0          |     48     |     yes      |      64bit       |                              TEST_UNLOCK_TOKEN                              |     0x708      |     16     |
+|         |                           |            |              |      64bit       |                               TEST_EXIT_TOKEN                               |     0x718      |     16     |
+|         |                           |            |              |      64bit       |                   [SECRET0_DIGEST](#Reg_secret0_digest_0)                   |     0x728      |     8      |
+|         |                           |            |              |      64bit       |                                 SECRET0_ZER                                 |     0x730      |     8      |
+|    8    |          SECRET1          |     96     |     yes      |      64bit       |                              NVM_ADDR_KEY_SEED                              |     0x738      |     32     |
+|         |                           |            |              |      64bit       |                              NVM_DATA_KEY_SEED                              |     0x758      |     32     |
+|         |                           |            |              |      64bit       |                             SRAM_DATA_KEY_SEED                              |     0x778      |     16     |
+|         |                           |            |              |      64bit       |                   [SECRET1_DIGEST](#Reg_secret1_digest_0)                   |     0x788      |     8      |
+|         |                           |            |              |      64bit       |                                 SECRET1_ZER                                 |     0x790      |     8      |
+|    9    |          SECRET2          |    128     |     yes      |      64bit       |                                  RMA_TOKEN                                  |     0x798      |     16     |
+|         |                           |            |              |      64bit       |                           CREATOR_ROOT_KEY_SHARE0                           |     0x7A8      |     48     |
+|         |                           |            |              |      64bit       |                           CREATOR_ROOT_KEY_SHARE1                           |     0x7D8      |     48     |
+|         |                           |            |              |      64bit       |                   [SECRET2_DIGEST](#Reg_secret2_digest_0)                   |     0x808      |     8      |
+|         |                           |            |              |      64bit       |                                 SECRET2_ZER                                 |     0x810      |     8      |
+|   10    |          SECRET3          |     48     |     yes      |      64bit       |                                FIELD_ENTROPY                                |     0x818      |     32     |
+|         |                           |            |              |      64bit       |                   [SECRET3_DIGEST](#Reg_secret3_digest_0)                   |     0x838      |     8      |
+|         |                           |            |              |      64bit       |                                 SECRET3_ZER                                 |     0x840      |     8      |
+|   11    |        LIFE_CYCLE         |     88     |      no      |      32bit       |                              LC_TRANSITION_CNT                              |     0x848      |     48     |
+|         |                           |            |              |      32bit       |                                  LC_STATE                                   |     0x878      |     40     |

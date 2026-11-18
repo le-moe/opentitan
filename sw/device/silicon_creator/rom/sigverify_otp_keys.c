@@ -4,6 +4,7 @@
 
 #include "sw/device/silicon_creator/rom/sigverify_otp_keys.h"
 
+#include "sw/device/lib/base/hardened_memory.h"
 #include "sw/device/silicon_creator/lib/drivers/hmac.h"
 #include "sw/device/silicon_creator/lib/drivers/otp.h"
 #include "sw/device/silicon_creator/lib/drivers/rnd.h"
@@ -22,10 +23,10 @@ enum {
       kAuthCodesignPartitionSize / sizeof(uint32_t),
 
   // The size of the `ROT_CREATOR_AUTH_CODESIGN` region used to store the key
-  // material. This is the size of the partition minus the size of the HMAC
+  // material. This is the size of the partition minus the size of the SHA-384
   // digest used to measure the integrity of the keys.
   kAuthcodesignPartitionMsgSize =
-      kAuthCodesignPartitionSize - sizeof(hmac_digest_t),
+      kAuthCodesignPartitionSize - sizeof(hmac_digest_sha384_t),
 
   kAuthcodesignPartitionMsgSizeInWords =
       kAuthcodesignPartitionMsgSize / sizeof(uint32_t),
@@ -203,15 +204,15 @@ rom_error_t sigverify_otp_keys_init(sigverify_otp_key_ctx_t *ctx) {
 }
 
 rom_error_t sigverify_otp_keys_check(sigverify_otp_key_ctx_t *ctx) {
-  hmac_digest_t got;
-  hmac_sha256(&ctx->keys, kAuthcodesignPartitionMsgSize, &got);
-  size_t i = 0;
-  for (; launder32(i) < kHmacDigestNumWords; ++i) {
-    if (got.digest[i] != ctx->keys.integrity_measurement.digest[i]) {
-      return kErrorSigverifyBadAuthPartition;
-    }
+  hmac_digest_sha384_t got;
+  hmac_sha384(&ctx->keys, kAuthcodesignPartitionMsgSize, &got);
+  hardened_bool_t eq =
+      hardened_memeq(got.digest, ctx->keys.integrity_measurement.digest,
+                     kHmacDigestSha384NumWords);
+  if (launder32(eq) != kHardenedBoolTrue) {
+    return kErrorSigverifyBadAuthPartition;
   }
-  HARDENED_CHECK_EQ(i, kHmacDigestNumWords);
+  HARDENED_CHECK_EQ(eq, kHardenedBoolTrue);
   return kErrorOk;
 }
 
@@ -284,6 +285,7 @@ rom_error_t sigverify_otp_keys_get(sigverify_otp_keys_get_params_t params,
         array_get_generic(params.key_array, params.key_size, cand_key_index);
     if (params.key_states[cand_key_index] ==
         kSigVerifyKeyAuthStateProvisioned) {
+      HARDENED_CHECK_EQ(cand_key->key_id, params.key_id);
       rom_error_t error = key_is_valid(cand_key->key_type, params.lc_state);
       HARDENED_CHECK_EQ(error, kErrorOk);
       *key = cand_key;

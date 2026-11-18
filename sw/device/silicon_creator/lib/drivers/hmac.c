@@ -7,6 +7,7 @@
 #include "hw/top/dt/hmac.h"
 #include "sw/device/lib/base/abs_mmio.h"
 #include "sw/device/lib/base/bitfield.h"
+#include "sw/device/lib/base/hardened.h"
 #include "sw/device/lib/base/macros.h"
 #include "sw/device/lib/base/memory.h"
 #include "sw/device/silicon_creator/lib/error.h"
@@ -19,7 +20,17 @@ static inline uint32_t hmac_base(void) {
   return dt_hmac_primary_reg_block(kHmacDt);
 }
 
-static void hmac_configure(bool big_endian_digest, bool hmac_mode) {
+static void hmac_configure_digest(bool big_endian_digest, bool hmac_mode,
+                                  uint32_t digest_size) {
+  // Wait for HMAC to become idle before updating `CFG`; writes while busy are
+  // discarded by hardware.
+  uint32_t status = 0;
+  do {
+    status = abs_mmio_read32(hmac_base() + HMAC_STATUS_REG_OFFSET);
+  } while (!bitfield_bit32_read(launder32(status), HMAC_STATUS_HMAC_IDLE_BIT));
+  HARDENED_CHECK_EQ(bitfield_bit32_read(status, HMAC_STATUS_HMAC_IDLE_BIT),
+                    true);
+
   // Clear the config, stopping the SHA engine.
   abs_mmio_write32(hmac_base() + HMAC_CFG_REG_OFFSET, 0u);
 
@@ -32,12 +43,15 @@ static void hmac_configure(bool big_endian_digest, bool hmac_mode) {
   reg = bitfield_bit32_write(reg, HMAC_CFG_ENDIAN_SWAP_BIT, false);
   reg = bitfield_bit32_write(reg, HMAC_CFG_SHA_EN_BIT, true);
   reg = bitfield_bit32_write(reg, HMAC_CFG_HMAC_EN_BIT, hmac_mode);
-  // configure to run SHA-2 256 with 256-bit key
-  reg = bitfield_field32_write(reg, HMAC_CFG_DIGEST_SIZE_FIELD,
-                               HMAC_CFG_DIGEST_SIZE_VALUE_SHA2_256);
+  reg = bitfield_field32_write(reg, HMAC_CFG_DIGEST_SIZE_FIELD, digest_size);
   reg = bitfield_field32_write(reg, HMAC_CFG_KEY_LENGTH_FIELD,
                                HMAC_CFG_KEY_LENGTH_VALUE_KEY_256);
   abs_mmio_write32(hmac_base() + HMAC_CFG_REG_OFFSET, reg);
+}
+
+static void hmac_configure(bool big_endian_digest, bool hmac_mode) {
+  hmac_configure_digest(big_endian_digest, hmac_mode,
+                        HMAC_CFG_DIGEST_SIZE_VALUE_SHA2_256);
 }
 
 void sc_hmac_hmac_sha256_configure(bool big_endian_digest, hmac_key_t key) {
@@ -50,6 +64,11 @@ void sc_hmac_hmac_sha256_configure(bool big_endian_digest, hmac_key_t key) {
 
 void hmac_sha256_configure(bool big_endian_digest) {
   hmac_configure(big_endian_digest, /*hmac_mode=*/false);
+}
+
+void hmac_sha384_configure(bool big_endian_digest) {
+  hmac_configure_digest(big_endian_digest, /*hmac_mode=*/false,
+                        HMAC_CFG_DIGEST_SIZE_VALUE_SHA2_384);
 }
 
 inline void hmac_sha256_start(void) {
@@ -97,11 +116,22 @@ static void wait_for_done(void) {
   uint32_t reg = 0;
   do {
     reg = abs_mmio_read32(hmac_base() + HMAC_INTR_STATE_REG_OFFSET);
-  } while (!bitfield_bit32_read(reg, HMAC_INTR_STATE_HMAC_DONE_BIT));
+    if (launder32(bitfield_bit32_read(reg, HMAC_INTR_STATE_HMAC_ERR_BIT))) {
+      HARDENED_TRAP();
+    }
+  } while (!bitfield_bit32_read(launder32(reg), HMAC_INTR_STATE_HMAC_DONE_BIT));
+  HARDENED_CHECK_EQ(bitfield_bit32_read(reg, HMAC_INTR_STATE_HMAC_ERR_BIT),
+                    false);
+  HARDENED_CHECK_EQ(bitfield_bit32_read(reg, HMAC_INTR_STATE_HMAC_DONE_BIT),
+                    true);
   abs_mmio_write32(hmac_base() + HMAC_INTR_STATE_REG_OFFSET, reg);
 }
 
-void hmac_sha256_final_truncated(uint32_t *digest, size_t len) {
+/**
+ * Reads `len` digest words (clamped to `max_words`) from the HMAC digest
+ * registers after waiting for completion.
+ */
+static void hmac_final_read(uint32_t *digest, size_t max_words, size_t len) {
   wait_for_done();
 
   uint32_t result, incr;
@@ -113,18 +143,24 @@ void hmac_sha256_final_truncated(uint32_t *digest, size_t len) {
   } else {
     // Little-endian output.
     // Note: we rely on 32-bit integer wraparound to cause the result register
-    // index to count down from 7 to 0.
-    result = HMAC_DIGEST_7_REG_OFFSET;
+    // index to count down from `max_words - 1` to 0.
+    result = HMAC_DIGEST_0_REG_OFFSET + (max_words - 1) * sizeof(uint32_t);
     incr = (uint32_t)-sizeof(uint32_t);
   }
 
   // Ensure len is at most the digest length; this function should never be
   // called with a `len` that is too big, but this helps ensure it at runtime
   // just in case.
-  len = len <= kHmacDigestNumWords ? len : kHmacDigestNumWords;
-  for (uint32_t i = 0; i < len; ++i, result += incr) {
+  len = len <= max_words ? len : max_words;
+  size_t i = 0;
+  for (; launder32(i) < len; ++i, result += incr) {
     digest[i] = abs_mmio_read32(hmac_base() + result);
   }
+  HARDENED_CHECK_EQ(i, len);
+}
+
+void hmac_sha256_final_truncated(uint32_t *digest, size_t len) {
+  hmac_final_read(digest, kHmacDigestNumWords, len);
 }
 
 void hmac_sha256(const void *data, size_t len, hmac_digest_t *digest) {
@@ -132,6 +168,27 @@ void hmac_sha256(const void *data, size_t len, hmac_digest_t *digest) {
   hmac_sha256_update(data, len);
   hmac_sha256_process();
   hmac_sha256_final(digest);
+}
+
+void hmac_sha384_init(void) {
+  hmac_sha384_configure(false);
+  hmac_sha256_start();
+}
+
+void hmac_sha384_final(hmac_digest_sha384_t *digest) {
+  hmac_final_read(digest->digest, kHmacDigestSha384NumWords,
+                  kHmacDigestSha384NumWords);
+}
+
+void hmac_sha384(const void *data, size_t len, hmac_digest_sha384_t *digest) {
+  hmac_sha384_init();
+  hmac_sha256_update(data, len);
+  hmac_sha256_process();
+  hmac_sha384_final(digest);
+}
+
+void hmac_wipe(uint32_t entropy) {
+  abs_mmio_write32(hmac_base() + HMAC_WIPE_SECRET_REG_OFFSET, entropy);
 }
 
 void sc_hmac_hmac_sha256(const void *data, size_t len, hmac_key_t key,

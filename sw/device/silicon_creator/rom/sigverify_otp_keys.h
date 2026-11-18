@@ -20,8 +20,8 @@ extern "C" {
 enum {
   /**Maximum number of ECDSA keys supported in OTP. */
   kSigVerifyOtpKeysEcdsaCount = 4,
-  /**Maximum number of SPX keys supported in OTP. */
-  kSigVerifyOtpKeysSpxCount = 4,
+  /**Maximum number of post-quantum keys (SPHINCS+ / ML-DSA) in OTP. */
+  kSigVerifyOtpKeysPqCount = 4,
 };
 
 /**
@@ -39,13 +39,13 @@ typedef struct sigverify_otp_keys {
    */
   sigverify_rom_ecdsa_p256_key_t ecdsa[kSigVerifyOtpKeysEcdsaCount];
   /**
-   * SPX keys.
+   * Post-quantum keys (SPHINCS+ or ML-DSA-87).
    */
-  sigverify_rom_spx_key_t spx[kSigVerifyOtpKeysSpxCount];
+  sigverify_rom_pq_key_t pq[kSigVerifyOtpKeysPqCount];
   /**
-   * HMAC digest of the ECDSA and SPX keys.
+   * SHA-384 digest of the ECDSA and post-quantum keys.
    */
-  hmac_digest_t integrity_measurement;
+  hmac_digest_sha384_t integrity_measurement;
 } sigverify_otp_keys_t;
 
 /**
@@ -63,9 +63,9 @@ typedef struct sigverify_otp_key_states {
    */
   uint32_t ecdsa[kSigVerifyOtpKeysEcdsaCount];
   /**
-   * State of the SPX keys.
+   * State of the post-quantum keys.
    */
-  uint32_t spx[kSigVerifyOtpKeysSpxCount];
+  uint32_t pq[kSigVerifyOtpKeysPqCount];
 } sigverify_otp_key_states_t;
 
 /**

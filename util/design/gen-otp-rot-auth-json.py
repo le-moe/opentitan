@@ -22,10 +22,6 @@ format:
                     "value": "0x ..."
                 },
                 {
-                    "name": "ROT_CREATOR_AUTH_CODESIGN_SPX_KEY_CONFIG0",
-                    "value": "0x00000001"
-                },
-                {
                     "name": "ROT_CREATOR_AUTH_CODESIGN_ECDSA_KEY_TYPE0",
                     "value": "0x00000001"
                 },
@@ -40,7 +36,7 @@ format:
 }
 
 The script will generate the ROT creator authentication data and update the JSON
-file with the generated ROT_CREATOR_AUTH_CODESIGN_BLOCK_SHA2_256_HASH.
+file with the generated ROT_CREATOR_AUTH_CODESIGN_BLOCK_SHA2_384_HASH.
 """
 
 import argparse
@@ -48,14 +44,13 @@ import binascii
 import json
 
 import hjson
-from Crypto.Hash import SHA256
+from Crypto.Hash import SHA384
 
 _PARTITION_NAME = "ROT_CREATOR_AUTH_CODESIGN"
 
 _STRUCT_ITEM_NAMES_SPX = [
     "ROT_CREATOR_AUTH_CODESIGN_SPX_KEY_TYPE",
     "ROT_CREATOR_AUTH_CODESIGN_SPX_KEY",
-    "ROT_CREATOR_AUTH_CODESIGN_SPX_KEY_CONFIG",
 ]
 
 _STRUCT_ITEM_NAMES_ECDSA = [
@@ -65,8 +60,7 @@ _STRUCT_ITEM_NAMES_ECDSA = [
 
 _EXPECTED_ITEM_SIZES = {
     "ROT_CREATOR_AUTH_CODESIGN_SPX_KEY_TYPE": 4,
-    "ROT_CREATOR_AUTH_CODESIGN_SPX_KEY": 32,
-    "ROT_CREATOR_AUTH_CODESIGN_SPX_KEY_CONFIG": 4,
+    "ROT_CREATOR_AUTH_CODESIGN_SPX_KEY": 48,
     "ROT_CREATOR_AUTH_CODESIGN_ECDSA_KEY_TYPE": 4,
     "ROT_CREATOR_AUTH_CODESIGN_ECDSA_KEY": 64,
 }
@@ -74,7 +68,7 @@ _EXPECTED_ITEM_SIZES = {
 _SPX_KEY_COUNT = 4
 _ECDSA_KEY_COUNT = 4
 
-_DIGEST_FIELD_NAME = "ROT_CREATOR_AUTH_CODESIGN_BLOCK_SHA2_256_HASH"
+_DIGEST_FIELD_NAME = "ROT_CREATOR_AUTH_CODESIGN_BLOCK_SHA2_384_HASH"
 
 
 class RotCreatorAuthCodesign:
@@ -96,6 +90,8 @@ class RotCreatorAuthCodesign:
                         key_value = item["value"]
                         key_value = key_value[2:] if key_value.startswith(
                             "0x") else key_value
+                        if len(key_value) % 2:
+                            key_value = "0" + key_value
                         key_value = binascii.unhexlify(key_value)
                         return key_value
         return None
@@ -132,6 +128,11 @@ class RotCreatorAuthCodesign:
                 value = self.get_key_value(item + str(i))
                 if value is not None:
                     padding_length = _EXPECTED_ITEM_SIZES[item] - len(value)
+                    if padding_length < 0:
+                        raise ValueError(
+                            f"{item}{i} length {len(value)} exceeds expected "
+                            f"{_EXPECTED_ITEM_SIZES[item]}"
+                        )
                     bin_data = b'\x00' * padding_length + value
                 else:
                     bin_data = b'\x00' * _EXPECTED_ITEM_SIZES[item]
@@ -151,7 +152,7 @@ class RotCreatorAuthCodesign:
             _STRUCT_ITEM_NAMES_ECDSA, _ECDSA_KEY_COUNT)
         partition_buffer += self.build_key_type_buffer(_STRUCT_ITEM_NAMES_SPX,
                                                        _SPX_KEY_COUNT)
-        digest = SHA256.new(partition_buffer).digest()
+        digest = SHA384.new(partition_buffer).digest()
         return partition_buffer, bytes(digest)
 
     def update_json_with_partition_digest(self, digest):

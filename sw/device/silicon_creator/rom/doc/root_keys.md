@@ -48,7 +48,10 @@ secure boot verification.
 
 ### SLH-DSA Key
 
-Each SLH-DSA key requires 40 bytes of OTP storage.
+Each post-quantum key slot requires 52 bytes of OTP storage (`4 B` `key_type`
+plus a `48 B` payload). For SLH-DSA keys, the `48 B` payload packs the 32-byte
+public key followed by the 4-byte `config_id` parameter and 12 bytes of zero
+padding.
 
 The `key_type` determines the life cycle states in which the key is enabled for
 secure boot verification.
@@ -62,11 +65,11 @@ options can be found in https://eprint.iacr.org/2022/1725.pdf.
 ### Code Sign Partitions
 
 The `ROT_CREATOR_AUTH_CODESIGN` OTP partition is used to store four P-256 keys
-and four SLH-DSA keys. The partition requires 464 bytes of software visible
-storage. The partition is locked at manufacturing time to protect against
-malicious write attempts. The likelihood of a successful write is low, but the
-attacker may be able to weaken the key by finding a write value that results in
-a valid integrity code update.
+and four post-quantum (SLH-DSA or ML-DSA) keys. The partition requires 528
+bytes of software visible storage. The partition is locked at manufacturing time
+to protect against malicious write attempts. The likelihood of a successful write
+is low, but the attacker may be able to weaken the key by finding a write value
+that results in a valid integrity code update.
 
 The `ROT_CREATOR_AUTH_STATE` OTP partition is used to capture the state of each
 key slot. Each key can be in one of the following states: `BLANK`,
@@ -86,8 +89,8 @@ available in hardware to perform continuous integrity checks. Similarly, there
 is no support for detecting any integrity issues propagated through the bus. The
 ROM is required to implement integrity checks before using any key material.
 
-The `ROT_CREATOR_AUTH_CODESIGN_BLOCK_SHA2_256_HASH`field inside the
-`ROT_CREATOR_AUTH_CODESIGN` partition must be provisioned with the SHA2-256
+The `ROT_CREATOR_AUTH_CODESIGN_BLOCK_SHA2_384_HASH` field inside the
+`ROT_CREATOR_AUTH_CODESIGN` partition must be provisioned with the SHA2-384
 digest calculated from all the key slots processed as one contiguous block. The
 ROM must verify the hash after loading the keys into SRAM and before any key
 operations. Once the keys are loaded into SRAM, the ROM relies on the SRAM and

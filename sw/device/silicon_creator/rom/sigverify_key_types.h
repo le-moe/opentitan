@@ -263,6 +263,53 @@ static_assert(
     sizeof(sigverify_rom_spx_key_entry_t) == sizeof(sigverify_rom_spx_key_t),
     "Size of an SPX public key entry must be equal to the size of a key");
 
+/**
+ * An SPX public key entry stored in a 52-byte post-quantum OTP slot.
+ */
+typedef struct sigverify_rom_pq_spx_entry {
+  /**
+   * Actual 40-byte SPX public key entry.
+   */
+  sigverify_rom_spx_key_entry_t entry;
+  /**
+   * Zero padding to match the 52-byte post-quantum OTP slot size.
+   */
+  uint32_t pad[3];
+} sigverify_rom_pq_spx_entry_t;
+
+OT_ASSERT_SIZE(sigverify_rom_pq_spx_entry_t, 52);
+
+/**
+ * Union representing a 52-byte post-quantum public key slot stored in OTP.
+ *
+ * Each slot starts with the common `sigverify_rom_key_header_t` prefix and
+ * holds either a padded SPHINCS+ key entry or a 48-byte ML-DSA-87 `tr` digest.
+ */
+typedef union sigverify_rom_pq_key {
+  /**
+   * Common initial sequence.
+   */
+  sigverify_rom_key_header_t key_header;
+  /**
+   * ML-DSA-87 public key entry (key type + 48-byte `tr` prefix).
+   */
+  struct {
+    sigverify_key_type_t key_type;
+    uint32_t mldsa_tr[12];
+  } mldsa;
+  /**
+   * SPHINCS+ public key entry padded to 52 bytes.
+   */
+  sigverify_rom_pq_spx_entry_t spx;
+} sigverify_rom_pq_key_t;
+
+OT_ASSERT_SIZE(sigverify_rom_pq_key_t, 52);
+OT_ASSERT_MEMBER_OFFSET(sigverify_rom_pq_key_t, mldsa.key_type, 0);
+OT_ASSERT_MEMBER_OFFSET(sigverify_rom_pq_key_t, mldsa.mldsa_tr[0], 4);
+OT_ASSERT_MEMBER_OFFSET(sigverify_rom_pq_key_t, spx.entry.key_type, 0);
+OT_ASSERT_MEMBER_OFFSET(sigverify_rom_pq_key_t, spx.entry.key.data[0], 4);
+OT_ASSERT_MEMBER_OFFSET(sigverify_rom_pq_key_t, spx.entry.config_id, 36);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus

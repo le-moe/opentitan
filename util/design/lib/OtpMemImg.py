@@ -597,8 +597,8 @@ class OtpMemImg(OtpMemMap):
 
                 # TODO: this is a bug in how reggen generates parameter defines
                 item_offset_name = item["name"] + "_OFFSET"
-                if item_offset_name == "ROT_CREATOR_AUTH_CODESIGN_BLOCK_SHA2_256_HASH_OFFSET":
-                    item_offset_name = "ROTCREATORAUTHCODESIGNBLOCKSHA2_256HASHOFFSET"
+                if item_offset_name == "ROT_CREATOR_AUTH_CODESIGN_BLOCK_SHA2_384_HASH_OFFSET":
+                    item_offset_name = "ROTCREATORAUTHCODESIGNBLOCKSHA2_384HASHOFFSET"
 
                 items.append({
                     'name':

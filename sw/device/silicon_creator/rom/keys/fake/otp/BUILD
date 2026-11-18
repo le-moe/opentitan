@@ -12,6 +12,10 @@ load(
 
 package(default_visibility = ["//visibility:public"])
 
+# Each 48-byte ROT_CREATOR_AUTH_CODESIGN_SPX_KEY{i} slot packs:
+#   bits   0..255: 32-byte SPHINCS+ key (LSB)
+#   bits 256..287: 4-byte config_id
+#   bits 288..383: 12-byte zero pad (MSB)
 otp_json_rot_keys(
     name = "json_rot_keys",
     partitions = [
@@ -36,23 +40,19 @@ otp_json_rot_keys(
 
                 # //sw/device/silicon_creator/rom/keys/fake/spx:spx_keyset "test_key_0"
                 "ROT_CREATOR_AUTH_CODESIGN_SPX_KEY_TYPE0": otp_hex(CONST.SIGVERIFY.KEY_TYPE.TEST),
-                "ROT_CREATOR_AUTH_CODESIGN_SPX_KEY0": "0xa7fd92541005bf04f172710eaafa228220ce5b2a73e009c74fdc04eefa2a1ba6",
-                "ROT_CREATOR_AUTH_CODESIGN_SPX_KEY_CONFIG0": otp_hex(CONST.SPX_CONFIG_ID.SHA2_128S),
+                "ROT_CREATOR_AUTH_CODESIGN_SPX_KEY0": "0x" + ("00" * 12) + otp_hex(CONST.SPX_CONFIG_ID.SHA2_128S)[2:] + "a7fd92541005bf04f172710eaafa228220ce5b2a73e009c74fdc04eefa2a1ba6",
 
                 # //sw/device/silicon_creator/rom/keys/fake/spx:spx_keyset "dev_key_0"
                 "ROT_CREATOR_AUTH_CODESIGN_SPX_KEY_TYPE1": otp_hex(CONST.SIGVERIFY.KEY_TYPE.DEV),
-                "ROT_CREATOR_AUTH_CODESIGN_SPX_KEY1": "0x594087c53775908295afa7000d11eec6fc430f8e7858e774e595f1d161f34ce4",
-                "ROT_CREATOR_AUTH_CODESIGN_SPX_KEY_CONFIG1": otp_hex(CONST.SPX_CONFIG_ID.SHA2_128S),
+                "ROT_CREATOR_AUTH_CODESIGN_SPX_KEY1": "0x" + ("00" * 12) + otp_hex(CONST.SPX_CONFIG_ID.SHA2_128S)[2:] + "594087c53775908295afa7000d11eec6fc430f8e7858e774e595f1d161f34ce4",
 
                 # //sw/device/silicon_creator/rom/keys/fake/spx:spx_keyset "prod_key_0"
                 "ROT_CREATOR_AUTH_CODESIGN_SPX_KEY_TYPE2": otp_hex(CONST.SIGVERIFY.KEY_TYPE.PROD),
-                "ROT_CREATOR_AUTH_CODESIGN_SPX_KEY2": "0x789b490a8c50f4dadee29c091dfe267bfedece98519c46bdb2ade5d32d3e6e02",
-                "ROT_CREATOR_AUTH_CODESIGN_SPX_KEY_CONFIG2": otp_hex(CONST.SPX_CONFIG_ID.SHA2_128S),
+                "ROT_CREATOR_AUTH_CODESIGN_SPX_KEY2": "0x" + ("00" * 12) + otp_hex(CONST.SPX_CONFIG_ID.SHA2_128S)[2:] + "789b490a8c50f4dadee29c091dfe267bfedece98519c46bdb2ade5d32d3e6e02",
 
                 # //sw/device/silicon_creator/rom/keys/fake/spx:spx_keyset "prod_key_1"
                 "ROT_CREATOR_AUTH_CODESIGN_SPX_KEY_TYPE3": otp_hex(CONST.SIGVERIFY.KEY_TYPE.PROD),
-                "ROT_CREATOR_AUTH_CODESIGN_SPX_KEY3": "0x4d83c8d10356fbb033ae5f9a3ee242a21f5a1a8b8c9a5579496271faad63458a",
-                "ROT_CREATOR_AUTH_CODESIGN_SPX_KEY_CONFIG3": otp_hex(CONST.SPX_CONFIG_ID.SHA2_128S_PREHASH),
+                "ROT_CREATOR_AUTH_CODESIGN_SPX_KEY3": "0x" + ("00" * 12) + otp_hex(CONST.SPX_CONFIG_ID.SHA2_128S_PREHASH)[2:] + "4d83c8d10356fbb033ae5f9a3ee242a21f5a1a8b8c9a5579496271faad63458a",
             },
         ),
         otp_partition(

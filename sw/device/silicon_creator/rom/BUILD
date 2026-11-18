@@ -432,6 +432,7 @@ cc_library(
         ":sigverify_key_types",
         "//hw/top:otp_ctrl_c_regs",
         "//hw/top/dt",
+        "//sw/device/lib/base:hardened_memory",
         "//sw/device/lib/base:macros",
         "//sw/device/silicon_creator/lib:error",
         "//sw/device/silicon_creator/lib/drivers:hmac",
