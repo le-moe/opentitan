@@ -47,6 +47,49 @@ enum {
 };
 
 /**
+ * Post-quantum secure boot policy decoded from OTP and life cycle state.
+ *
+ * Encoding generated with:
+ *   ./util/design/sparse-fsm-encode.py --language=c --avoid-zero \
+ *     --seed 20261117 --distance 15 --states 3 --bits 32
+ *
+ * Minimum Hamming distance: 17
+ * Maximum Hamming distance: 21
+ */
+typedef enum sigverify_pq_policy {
+  /**
+   * Post-quantum signature verification is disabled (`TEST_UNLOCKED*` or OTP
+   * `kSigverifySpxDisabledOtp`). Only ECDSA-P256 is required.
+   */
+  kSigverifyPqPolicyDisabled = 0x063f397e,
+  /**
+   * SPHINCS+ signature verification is enabled (`0` or `kHardenedBoolTrue`).
+   */
+  kSigverifyPqPolicySpx = 0xf8ba1161,
+  /**
+   * Hardware-accelerated ML-DSA-87 signature verification is enabled
+   * (`kSigverifyPqMldsaEnabledOtp`).
+   */
+  kSigverifyPqPolicyMldsa = 0x33c9ee59,
+} sigverify_pq_policy_t;
+
+/**
+ * Decodes the post-quantum secure boot policy from `(lc_state, OTP)`.
+ *
+ * Always returns `kSigverifyPqPolicyDisabled` in `TEST_UNLOCKED*`. In
+ * `Dev`/`Prod`/`ProdEnd`/`Rma`, maps `CREATOR_SW_CFG_SIGVERIFY_SPX_EN`:
+ * - `kSigverifySpxDisabledOtp` -> `kSigverifyPqPolicyDisabled`
+ * - `0` or `kHardenedBoolTrue` -> `kSigverifyPqPolicySpx`
+ * - `kSigverifyPqMldsaEnabledOtp` -> `kSigverifyPqPolicyMldsa`
+ * Any unknown OTP value traps immediately via `HARDENED_TRAP()`.
+ *
+ * @param lc_state Life cycle state of the device.
+ * @return Decoded post-quantum policy.
+ */
+OT_WARN_UNUSED_RESULT
+sigverify_pq_policy_t sigverify_pq_policy_get(lifecycle_state_t lc_state);
+
+/**
  * Get whether SPHINCS+ signature verification is enabled in OTP.
  *
  * This function returns the value of the `CREATOR_SW_CFG_SIGVERIFY_SPX_EN` OTP

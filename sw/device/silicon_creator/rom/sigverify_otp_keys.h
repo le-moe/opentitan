@@ -109,6 +109,20 @@ typedef struct sigverify_otp_keys_get_params {
   size_t key_size;
 
   uint32_t *key_states;
+  /**
+   * Optional extended digest to disambiguate colliding `key_id` entries across
+   * multi-scheme slots (e.g., 48 B ML-DSA `tr`). Ignored when
+   * `extra_digest_words == 0`.
+   */
+  const uint32_t *extra_digest;
+  /**
+   * Byte offset of the extended digest within each entry of `key_array`.
+   */
+  size_t extra_digest_offset;
+  /**
+   * Number of 32-bit words in `extra_digest` (0 to skip extended matching).
+   */
+  size_t extra_digest_words;
 } sigverify_otp_keys_get_params_t;
 
 /**

@@ -44,6 +44,8 @@
 #include "sw/device/silicon_creator/lib/nvm_ctrl.h"
 #include "sw/device/silicon_creator/lib/otbn_boot_services.h"
 #include "sw/device/silicon_creator/lib/shutdown.h"
+#include "sw/device/silicon_creator/lib/sigverify/mldsa87_key.h"
+#include "sw/device/silicon_creator/lib/sigverify/mldsa_verify.h"
 #include "sw/device/silicon_creator/lib/sigverify/sigverify.h"
 #include "sw/device/silicon_creator/lib/stack_utilization.h"
 #include "sw/device/silicon_creator/rom/boot_policy.h"
@@ -52,6 +54,7 @@
 #include "sw/device/silicon_creator/rom/rom_epmp.h"
 #include "sw/device/silicon_creator/rom/rom_state.h"
 #include "sw/device/silicon_creator/rom/sigverify_keys_ecdsa_p256.h"
+#include "sw/device/silicon_creator/rom/sigverify_keys_mldsa.h"
 #include "sw/device/silicon_creator/rom/sigverify_keys_spx.h"
 #include "sw/device/silicon_creator/rom/sigverify_otp_keys.h"
 
@@ -365,23 +368,51 @@ static rom_error_t rom_verify(const manifest_t *manifest, uint32_t *nvm_exec) {
       &sigverify_ctx,
       sigverify_ecdsa_p256_key_id_get(&manifest->ecdsa_public_key), lc_state,
       &ecdsa_key));
-  // SPX+ key.
+  // Decode post-quantum secure boot policy from (lc_state, OTP).
+  // Unknown OTP values trap immediately.
+  sigverify_pq_policy_t pq_policy = sigverify_pq_policy_get(lc_state);
   const sigverify_spx_key_t *spx_key = NULL;
   sigverify_spx_config_id_t spx_config = 0;
   const sigverify_spx_signature_t *spx_signature = NULL;
-  uint32_t sigverify_spx_en = sigverify_spx_verify_enabled(lc_state);
-  if (launder32(sigverify_spx_en) != kSigverifySpxDisabledOtp) {
-    const manifest_ext_spx_key_t *ext_spx_key;
-    HARDENED_RETURN_IF_ERROR(manifest_ext_get_spx_key(manifest, &ext_spx_key));
-    HARDENED_RETURN_IF_ERROR(sigverify_spx_key_get(
-        &sigverify_ctx, sigverify_spx_key_id_get(&ext_spx_key->key), lc_state,
-        &spx_key, &spx_config));
-    const manifest_ext_spx_signature_t *ext_spx_signature;
-    HARDENED_RETURN_IF_ERROR(
-        manifest_ext_get_spx_signature(manifest, &ext_spx_signature));
-    spx_signature = &ext_spx_signature->signature;
-  } else {
-    HARDENED_CHECK_EQ(sigverify_spx_en, kSigverifySpxDisabledOtp);
+  const sigverify_mldsa87_key_t *mldsa_pk = NULL;
+  const sigverify_mldsa87_signature_t *mldsa_signature = NULL;
+  uint32_t mldsa_tr[kMldsa87TrWords];
+  switch (launder32(pq_policy)) {
+    case kSigverifyPqPolicyDisabled:
+      HARDENED_CHECK_EQ(pq_policy, kSigverifyPqPolicyDisabled);
+      break;
+    case kSigverifyPqPolicySpx: {
+      HARDENED_CHECK_EQ(pq_policy, kSigverifyPqPolicySpx);
+      const manifest_ext_spx_key_t *ext_spx_key;
+      HARDENED_RETURN_IF_ERROR(
+          manifest_ext_get_spx_key(manifest, &ext_spx_key));
+      HARDENED_RETURN_IF_ERROR(sigverify_spx_key_get(
+          &sigverify_ctx, sigverify_spx_key_id_get(&ext_spx_key->key), lc_state,
+          &spx_key, &spx_config));
+      const manifest_ext_spx_signature_t *ext_spx_signature;
+      HARDENED_RETURN_IF_ERROR(
+          manifest_ext_get_spx_signature(manifest, &ext_spx_signature));
+      spx_signature = &ext_spx_signature->signature;
+      break;
+    }
+    case kSigverifyPqPolicyMldsa: {
+      HARDENED_CHECK_EQ(pq_policy, kSigverifyPqPolicyMldsa);
+      const manifest_ext_mldsa87_key_t *ext_mldsa_key;
+      const manifest_ext_mldsa87_signature_t *ext_mldsa_signature;
+      HARDENED_RETURN_IF_ERROR(
+          manifest_ext_get_mldsa87_key(manifest, &ext_mldsa_key));
+      HARDENED_RETURN_IF_ERROR(
+          manifest_ext_get_mldsa87_signature(manifest, &ext_mldsa_signature));
+      mldsa_pk = &ext_mldsa_key->key;
+      mldsa_signature = &ext_mldsa_signature->signature;
+      const sigverify_rom_pq_key_t *otp_mldsa_key = NULL;
+      HARDENED_RETURN_IF_ERROR(sigverify_mldsa_key_get(
+          &sigverify_ctx, mldsa_pk, lc_state, mldsa_tr, &otp_mldsa_key));
+      break;
+    }
+    default:
+      HARDENED_TRAP();
+      OT_UNREACHABLE();
   }
 
   // Measure ROM_EXT and portions of manifest via SHA256 digest.
@@ -418,32 +449,65 @@ static rom_error_t rom_verify(const manifest_t *manifest, uint32_t *nvm_exec) {
   memcpy(&boot_measurements.rom_ext, &rev_digest,
          sizeof(boot_measurements.rom_ext));
 
+  // Compute ML-DSA message representative mu = SHAKE256(tr || 0x00 || 0x00 ||
+  // usage_constraints || anti_rollback || digest_region, 64) when ML-DSA is
+  // active.
+  uint32_t mldsa_mu[kMldsa87MuWords];
+  if (launder32(pq_policy) == kSigverifyPqPolicyMldsa) {
+    HARDENED_CHECK_EQ(pq_policy, kSigverifyPqPolicyMldsa);
+    HARDENED_RETURN_IF_ERROR(mldsa_compute_mu(
+        mldsa_tr, &usage_constraints_from_hw, sizeof(usage_constraints_from_hw),
+        anti_rollback, anti_rollback_len, digest_region.start,
+        digest_region.length, mldsa_mu));
+  }
+
   CFI_FUNC_COUNTER_INCREMENT(rom_counters, kCfiRomVerify, 2);
 
+  // Re-check PQ policy right before signature verification to guard against
+  // fault injection between key validation and verification.
+  HARDENED_CHECK_EQ(pq_policy, sigverify_pq_policy_get(lc_state));
+
   /**
-   * Verify the ECDSA/SPX+ signatures of ROM_EXT.
+   * Verify the ECDSA + PQ signatures of ROM_EXT.
    *
    * We swap the order of signature verifications randomly.
    */
   *nvm_exec = 0;
-  if (rnd_uint32() < 0x80000000) {
-    HARDENED_RETURN_IF_ERROR(sigverify_ecdsa_p256_verify(
-        &manifest->ecdsa_signature, ecdsa_key, &rev_digest, nvm_exec));
+  if (launder32(pq_policy) == kSigverifyPqPolicyMldsa) {
+    HARDENED_CHECK_EQ(pq_policy, kSigverifyPqPolicyMldsa);
+    if (rnd_uint32() < 0x80000000) {
+      HARDENED_RETURN_IF_ERROR(sigverify_ecdsa_p256_verify(
+          &manifest->ecdsa_signature, ecdsa_key, &rev_digest, nvm_exec));
 
-    return sigverify_spx_verify(
-        spx_signature, spx_key, spx_config, lc_state,
-        &usage_constraints_from_hw, sizeof(usage_constraints_from_hw),
-        anti_rollback, anti_rollback_len, digest_region.start,
-        digest_region.length, &fwd_digest, nvm_exec);
+      return mldsa_verify(mldsa_pk, mldsa_signature, mldsa_mu, nvm_exec);
+    } else {
+      HARDENED_RETURN_IF_ERROR(
+          mldsa_verify(mldsa_pk, mldsa_signature, mldsa_mu, nvm_exec));
+
+      return sigverify_ecdsa_p256_verify(&manifest->ecdsa_signature, ecdsa_key,
+                                         &rev_digest, nvm_exec);
+    }
   } else {
-    HARDENED_RETURN_IF_ERROR(sigverify_spx_verify(
-        spx_signature, spx_key, spx_config, lc_state,
-        &usage_constraints_from_hw, sizeof(usage_constraints_from_hw),
-        anti_rollback, anti_rollback_len, digest_region.start,
-        digest_region.length, &fwd_digest, nvm_exec));
+    HARDENED_CHECK_NE(pq_policy, kSigverifyPqPolicyMldsa);
+    if (rnd_uint32() < 0x80000000) {
+      HARDENED_RETURN_IF_ERROR(sigverify_ecdsa_p256_verify(
+          &manifest->ecdsa_signature, ecdsa_key, &rev_digest, nvm_exec));
 
-    return sigverify_ecdsa_p256_verify(&manifest->ecdsa_signature, ecdsa_key,
-                                       &rev_digest, nvm_exec);
+      return sigverify_spx_verify(
+          spx_signature, spx_key, spx_config, lc_state,
+          &usage_constraints_from_hw, sizeof(usage_constraints_from_hw),
+          anti_rollback, anti_rollback_len, digest_region.start,
+          digest_region.length, &fwd_digest, nvm_exec);
+    } else {
+      HARDENED_RETURN_IF_ERROR(sigverify_spx_verify(
+          spx_signature, spx_key, spx_config, lc_state,
+          &usage_constraints_from_hw, sizeof(usage_constraints_from_hw),
+          anti_rollback, anti_rollback_len, digest_region.start,
+          digest_region.length, &fwd_digest, nvm_exec));
+
+      return sigverify_ecdsa_p256_verify(&manifest->ecdsa_signature, ecdsa_key,
+                                         &rev_digest, nvm_exec);
+    }
   }
 }
 

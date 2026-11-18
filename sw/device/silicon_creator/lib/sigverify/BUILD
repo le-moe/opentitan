@@ -6,6 +6,7 @@ load(
     "@bazel_skylib//lib:dicts.bzl",
     "dicts",
 )
+load("@rules_python//python:defs.bzl", "py_binary")
 load("//hw/top:defs.bzl", "opentitan_require_ip")
 load(
     "//rules:cross_platform.bzl",
@@ -220,6 +221,20 @@ cc_library(
     ],
 )
 
+cc_test(
+    name = "spx_verify_unittest",
+    srcs = ["spx_verify_unittest.cc"],
+    deps = [
+        ":spx_verify",
+        "//hw/top:otp_ctrl_c_regs",
+        "//sw/device/lib/base:hardened",
+        "//sw/device/silicon_creator/lib/drivers:lifecycle",
+        "//sw/device/silicon_creator/lib/drivers:otp",
+        "//sw/device/silicon_creator/testing:rom_test",
+        "@googletest//:gtest_main",
+    ],
+)
+
 opentitan_test(
     name = "spx_verify_functest",
     srcs = ["spx_verify_functest.c"],
@@ -410,4 +425,10 @@ opentitan_test(
         "//sw/device/silicon_creator/lib:otbn_boot_services",
         "//sw/device/silicon_creator/lib/base:sec_mmio",
     ],
+)
+
+py_binary(
+    name = "mldsa_manifest_corrupt",
+    testonly = True,
+    srcs = ["mldsa_manifest_corrupt.py"],
 )

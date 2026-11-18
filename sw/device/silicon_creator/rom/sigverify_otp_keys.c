@@ -234,6 +234,15 @@ static inline const sigverify_rom_key_header_t *array_get_generic(
 
 rom_error_t sigverify_otp_keys_get(sigverify_otp_keys_get_params_t params,
                                    const sigverify_rom_key_header_t **key) {
+  if (params.extra_digest_words > 0 &&
+      (params.extra_digest == NULL ||
+       params.extra_digest_offset > params.key_size ||
+       (params.extra_digest_offset % sizeof(uint32_t)) != 0 ||
+       params.extra_digest_words >
+           (params.key_size - params.extra_digest_offset) / sizeof(uint32_t))) {
+    return kErrorSigverifyBadKey;
+  }
+
   size_t cand_key_index = UINT32_MAX;
 
   // Randomize the start index to avoid always picking the first key. A
@@ -252,15 +261,28 @@ rom_error_t sigverify_otp_keys_get(sigverify_otp_keys_get_params_t params,
         array_get_generic(params.key_array, params.key_size, i);
     if (k->key_id == params.key_id) {
       HARDENED_CHECK_EQ(k->key_id, params.key_id);
-      if (params.key_states[i] == kSigVerifyKeyAuthStateProvisioned) {
-        rom_error_t error = key_is_valid(k->key_type, params.lc_state);
-        if (launder32(error) == kErrorOk) {
-          HARDENED_CHECK_EQ(error, kErrorOk);
-          // Store the index of the valid key rather than returning early. This
-          // is to make it harder for an attacker to predict the timing of the
-          // function. This will also allow us to perform a redundant check to
-          // ensure that the key is valid.
-          cand_key_index = i;
+      const uint32_t *slot_digest =
+          (const uint32_t *)((const char *)k + params.extra_digest_offset);
+      if (params.extra_digest_words == 0 ||
+          launder32(hardened_memeq(params.extra_digest, slot_digest,
+                                   params.extra_digest_words)) ==
+              kHardenedBoolTrue) {
+        if (params.extra_digest_words > 0) {
+          HARDENED_CHECK_EQ(
+              hardened_memeq(params.extra_digest, slot_digest,
+                             params.extra_digest_words),
+              kHardenedBoolTrue);
+        }
+        if (params.key_states[i] == kSigVerifyKeyAuthStateProvisioned) {
+          rom_error_t error = key_is_valid(k->key_type, params.lc_state);
+          if (launder32(error) == kErrorOk) {
+            HARDENED_CHECK_EQ(error, kErrorOk);
+            // Store the index of the valid key rather than returning early.
+            // This is to make it harder for an attacker to predict the timing
+            // of the function. This will also allow us to perform a redundant
+            // check to ensure that the key is valid.
+            cand_key_index = i;
+          }
         }
       }
     }
@@ -286,6 +308,15 @@ rom_error_t sigverify_otp_keys_get(sigverify_otp_keys_get_params_t params,
     if (params.key_states[cand_key_index] ==
         kSigVerifyKeyAuthStateProvisioned) {
       HARDENED_CHECK_EQ(cand_key->key_id, params.key_id);
+      if (params.extra_digest_words > 0) {
+        const uint32_t *cand_digest =
+            (const uint32_t *)((const char *)cand_key +
+                               params.extra_digest_offset);
+        HARDENED_CHECK_EQ(
+            hardened_memeq(params.extra_digest, cand_digest,
+                           params.extra_digest_words),
+            kHardenedBoolTrue);
+      }
       rom_error_t error = key_is_valid(cand_key->key_type, params.lc_state);
       HARDENED_CHECK_EQ(error, kErrorOk);
       *key = cand_key;

@@ -96,10 +96,13 @@ CONST = struct(
         ),
         SIGVERIFY = struct(
             BAD_RSA_SIGNATURE = 0x01535603,
+            BAD_SPX_SIGNATURE = 0x02535603,
             BAD_RSA_KEY = 0x04535603,
             BAD_ECDSA_SIGNATURE = 0x07535603,
             BAD_ECDSA_KEY = 0x09535603,
             BAD_SPX_KEY = 0x05535603,
+            BAD_MLDSA_SIGNATURE = 0x0d535603,
+            BAD_MLDSA_KEY = 0x0e535603,
         ),
         BOOT_POLICY = struct(
             BAD_IDENTIFIER = 0x0142500d,
@@ -109,6 +112,7 @@ CONST = struct(
         MANIFEST = struct(
             BAD_ENTRY_POINT = 0x014d410d,
             BAD_CODE_REGION = 0x024d410d,
+            BAD_EXTENSION = 0x044d410d,
         ),
         BOOT_DATA = struct(
             NOT_FOUND = 0x0142440d,

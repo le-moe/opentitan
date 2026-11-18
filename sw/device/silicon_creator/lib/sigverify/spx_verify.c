@@ -39,6 +39,27 @@ uint32_t sigverify_spx_verify_enabled(lifecycle_state_t lc_state) {
   }
 }
 
+sigverify_pq_policy_t sigverify_pq_policy_get(lifecycle_state_t lc_state) {
+  uint32_t en = sigverify_spx_verify_enabled(lc_state);
+  switch (launder32(en)) {
+    case kSigverifySpxDisabledOtp:
+      HARDENED_CHECK_EQ(en, kSigverifySpxDisabledOtp);
+      return kSigverifyPqPolicyDisabled;
+    case 0:
+      HARDENED_CHECK_EQ(en, 0);
+      return kSigverifyPqPolicySpx;
+    case kHardenedBoolTrue:
+      HARDENED_CHECK_EQ(en, kHardenedBoolTrue);
+      return kSigverifyPqPolicySpx;
+    case kSigverifyPqMldsaEnabledOtp:
+      HARDENED_CHECK_EQ(en, kSigverifyPqMldsaEnabledOtp);
+      return kSigverifyPqPolicyMldsa;
+    default:
+      HARDENED_TRAP();
+      OT_UNREACHABLE();
+  }
+}
+
 /**
  * Shares for producing the `flash_exec_spx` value in `sigverify_spx_verify()`
  * when SPHINCS+ signature verification is enabled. First 3 shares are generated

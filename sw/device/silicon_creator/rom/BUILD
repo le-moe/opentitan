@@ -162,6 +162,7 @@ cc_library(
         ":rom_epmp",
         ":rom_state",
         ":sigverify_keys_ecdsa_p256",
+        ":sigverify_keys_mldsa",
         ":sigverify_keys_spx",
         ":sigverify_otp_keys",
         "//hw/top:aon_timer_c_regs",
@@ -206,6 +207,8 @@ cc_library(
         "//sw/device/silicon_creator/lib/drivers:uart",
         "//sw/device/silicon_creator/lib/drivers:watchdog",
         "//sw/device/silicon_creator/lib/sigverify",
+        "//sw/device/silicon_creator/lib/sigverify:mldsa87_key",
+        "//sw/device/silicon_creator/lib/sigverify:mldsa_verify",
         "@rom_hooks",
     ],
 )
@@ -423,23 +426,40 @@ cc_fuzz_test(
     ],
 )
 
-cc_library(
+dual_cc_library(
     name = "sigverify_otp_keys",
-    srcs = ["sigverify_otp_keys.c"],
-    hdrs = ["sigverify_otp_keys.h"],
-    target_compatible_with = [OPENTITAN_CPU] + opentitan_require_top("earlgrey"),
-    deps = [
-        ":sigverify_key_types",
-        "//hw/top:otp_ctrl_c_regs",
-        "//hw/top/dt",
-        "//sw/device/lib/base:hardened_memory",
-        "//sw/device/lib/base:macros",
-        "//sw/device/silicon_creator/lib:error",
-        "//sw/device/silicon_creator/lib/drivers:hmac",
-        "//sw/device/silicon_creator/lib/drivers:lifecycle",
-        "//sw/device/silicon_creator/lib/drivers:otp",
-        "//sw/device/silicon_creator/lib/drivers:rnd",
-    ],
+    srcs = dual_inputs(
+        device = ["sigverify_otp_keys.c"],
+        host = ["mock_sigverify_otp_keys.cc"],
+    ),
+    hdrs = dual_inputs(
+        host = ["mock_sigverify_otp_keys.h"],
+        shared = ["sigverify_otp_keys.h"],
+    ),
+    target_compatible_with = dual_inputs(
+        device = [OPENTITAN_CPU] + opentitan_require_top("earlgrey"),
+    ),
+    deps = dual_inputs(
+        device = [
+            "//hw/top:otp_ctrl_c_regs",
+            "//hw/top/dt",
+            "//sw/device/lib/base:hardened_memory",
+            "//sw/device/silicon_creator/lib/drivers:otp",
+            "//sw/device/silicon_creator/lib/drivers:rnd",
+        ],
+        host = [
+            "//sw/device/lib/base:global_mock",
+            "//sw/device/silicon_creator/testing:rom_test",
+            "@googletest//:gtest",
+        ],
+        shared = [
+            ":sigverify_key_types",
+            "//sw/device/lib/base:macros",
+            "//sw/device/silicon_creator/lib:error",
+            "//sw/device/silicon_creator/lib/drivers:hmac",
+            "//sw/device/silicon_creator/lib/drivers:lifecycle",
+        ],
+    ),
 )
 
 cc_library(
@@ -488,6 +508,39 @@ cc_library(
         "//sw/device/silicon_creator/lib/drivers:lifecycle",
         "//sw/device/silicon_creator/lib/sigverify",
         "//sw/device/silicon_creator/lib/sigverify:spx_key",
+    ],
+)
+
+cc_library(
+    name = "sigverify_keys_mldsa",
+    srcs = [
+        "sigverify_keys_mldsa.c",
+    ],
+    hdrs = [
+        "sigverify_keys_mldsa.h",
+    ],
+    deps = [
+        ":sigverify_key_types",
+        ":sigverify_otp_keys",
+        "//sw/device/lib/base:hardened",
+        "//sw/device/lib/base:hardened_memory",
+        "//sw/device/silicon_creator/lib:error",
+        "//sw/device/silicon_creator/lib/drivers:lifecycle",
+        "//sw/device/silicon_creator/lib/sigverify:mldsa87_key",
+        "//sw/device/silicon_creator/lib/sigverify:mldsa_verify",
+    ],
+)
+
+cc_test(
+    name = "sigverify_keys_mldsa_unittest",
+    srcs = ["sigverify_keys_mldsa_unittest.cc"],
+    deps = [
+        ":sigverify_keys_mldsa",
+        "//hw/top:kmac_c_regs",
+        "//hw/top/dt:kmac",
+        "//sw/device/lib/base:abs_mmio",
+        "//sw/device/silicon_creator/testing:rom_test",
+        "@googletest//:gtest_main",
     ],
 )
 
